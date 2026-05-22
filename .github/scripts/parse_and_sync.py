@@ -85,15 +85,29 @@ def update_main_db_map(proc_list):
         
     return updated_content
 
-def upload_to_drive(service, filename, content):
-    # Ищем файл, указывая параметр supportsAllDrives для Общих дисков
-    query = f"name = '{filename}' and '{GOOGLE_FOLDER_ID}' in parents and trashed = false"
-    results = service.files().list(
-        q=query, 
-        fields="files(id)",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True
-    ).execute()
+def get_or_create_drive_folder(service, folder_name, parent_id):
+    """Ищет папку в Google Drive, если её нет — создает внутри parent_id"""
+    query = f"name = '{folder_name}' and '{parent_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    results = service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
+    items = results.get('files', [])
+    
+    if items:
+        return items[0]['id']
+        
+    # Если папки нет, создаем её в Общем Диске
+    folder_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_id]
+    }
+    folder = service.files().create(body=folder_metadata, fields='id', supportsAllDrives=True).execute()
+    print(f"📁 Создана новая папка в облаке: {folder_name}")
+    return folder['id']
+
+def upload_to_drive(service, filename, content, target_folder_id):
+    """Заливает файл в строго определенную папку на Дисках"""
+    query = f"name = '{filename}' and '{target_folder_id}' in parents and trashed = false"
+    results = service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
     items = results.get('files', [])
 
     file_stream = io.BytesIO(content.encode('utf-8'))
@@ -101,53 +115,66 @@ def upload_to_drive(service, filename, content):
 
     if items:
         file_id = items[0]['id']
-        service.files().update(
-            fileId=file_id, 
-            media_body=media,
-            supportsAllDrives=True
-        ).execute()
-        print(f"🔄 Синхронизирован в облако: {filename}")
+        service.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
+        print(f"🔄 Обновлен: {filename}")
     else:
         file_metadata = {
             'name': filename, 
-            'parents': [GOOGLE_FOLDER_ID]
+            'parents': [target_folder_id]
         }
-        # Создаем файл в Общем диске организации
-        service.files().create(
-            body=file_metadata, 
-            media_body=media, 
-            fields="id",
-            supportsAllDrives=True
-        ).execute()
-        print(f"📥 Загружен новый в облако: {filename}")
+        service.files().create(body=file_metadata, media_body=media, fields="id", supportsAllDrives=True).execute()
+        print(f"📥 Создан: {filename}")
 
 def main():
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=['https://www.googleapis.com/auth/drive'])
     service = build('drive', 'v3', credentials=creds)
     
-    proc_list = []
+    proc_dict = {}
     
-    if os.path.exists(SQL_FOLDER_PATH):
-        for root, dirs, files in os.walk(SQL_FOLDER_PATH):
+    # Нормализуем базовый путь
+    base_sql_path = os.path.normpath(SQL_FOLDER_PATH)
+    
+    if os.path.exists(base_sql_path):
+        for root, dirs, files in os.walk(base_sql_path):
             for file in files:
                 if file.endswith('.sql'):
                     proc_name = file.replace('.sql', '')
+                    
+                    if proc_name in proc_dict:
+                        continue
+                        
+                    # Вычисляем относительный путь подкаталога (например, "Finance" или "Logistics")
+                    rel_path = os.path.relpath(root, base_sql_path)
+                    
+                    # Определяем ID папки в Google Drive
+                    current_drive_folder_id = GOOGLE_FOLDER_ID
+                    if rel_path != '.':
+                        # Если файл лежит в подпапке, воссоздаем это дерево папок в Google Drive
+                        folder_parts = rel_path.split(os.sep)
+                        for part in folder_parts:
+                            current_drive_folder_id = get_or_create_drive_folder(service, part, current_drive_folder_id)
+                    
+                    # Читаем SQL
                     with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
                         sql_content = f.read()
                     
                     header_info, tables, description = parse_sql_header_and_relations(sql_content)
-                    proc_list.append((proc_name, description))
+                    proc_dict[proc_name] = description
                     
                     md_content = generate_proc_md(proc_name, header_info, tables)
                     
+                    # 1. Сохраняем .md локально в Git (в ту же подпапку, где лежит .sql)
                     with open(os.path.join(root, f"{proc_name}.md"), 'w', encoding='utf-8') as md_f:
                         md_f.write(md_content)
                     
-                    upload_to_drive(service, f"{proc_name}.md", md_content)
+                    # 2. Льем в Google Drive в соответствующую папку
+                    upload_to_drive(service, f"{proc_name}.md", md_content, current_drive_folder_id)
 
+    proc_list = list(proc_dict.items())
     updated_map_content = update_main_db_map(proc_list)
     if updated_map_content:
-        upload_to_drive(service, "MAIN_DB.md", updated_map_content)
+        # Корневую карту MAIN_DB.md кладем в корень папки Google Drive
+        upload_to_drive(service, "MAIN_DB.md", updated_map_content, GOOGLE_FOLDER_ID)
 
 if __name__ == '__main__':
     main()
