@@ -18,6 +18,7 @@ GO
 --
 
 
+--test
 ---------------------------------------------------------------------
 CREATE PROCEDURE GIN_AFTER
    @DOCUM_ID T_IDENTIFIER,            -- ��� ���������
