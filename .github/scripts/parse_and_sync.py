@@ -8,7 +8,7 @@ from googleapiclient.http import MediaIoBaseUpload
 SERVICE_ACCOUNT_FILE = 'github_credentials.json' 
 GOOGLE_FOLDER_ID = os.environ.get('GOOGLE_FOLDER_ID') 
 SQL_FOLDER_PATH = './MAIN_DB/StoredProcedure/' 
-MAIN_DB_MAP_PATH = './MAIN_DB.md' 
+MAIN_DB_MAP_PATH = './MAIN_DB/MAIN_DB.md' # 🔥 ИЗМЕНИЛИ ПУТЬ: теперь файл живет внутри папки MAIN_DB
 
 def parse_sql_header_and_relations(sql_text):
     header_match = re.search(r'-- ===+.*?-- ===+', sql_text, re.DOTALL)
@@ -86,7 +86,6 @@ def update_main_db_map(proc_list):
     return updated_content
 
 def get_or_create_drive_folder(service, folder_name, parent_id):
-    """Ищет папку в Google Drive, если её нет — создает внутри parent_id"""
     query = f"name = '{folder_name}' and '{parent_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     results = service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
     items = results.get('files', [])
@@ -94,7 +93,6 @@ def get_or_create_drive_folder(service, folder_name, parent_id):
     if items:
         return items[0]['id']
         
-    # Если папки нет, создаем её в Общем Диске
     folder_metadata = {
         'name': folder_name,
         'mimeType': 'application/vnd.google-apps.folder',
@@ -105,7 +103,6 @@ def get_or_create_drive_folder(service, folder_name, parent_id):
     return folder['id']
 
 def upload_to_drive(service, filename, content, target_folder_id):
-    """Заливает файл в строго определенную папку на Дисках"""
     query = f"name = '{filename}' and '{target_folder_id}' in parents and trashed = false"
     results = service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
     items = results.get('files', [])
@@ -130,8 +127,6 @@ def main():
     service = build('drive', 'v3', credentials=creds)
     
     proc_dict = {}
-    
-    # Нормализуем базовый путь
     base_sql_path = os.path.normpath(SQL_FOLDER_PATH)
     
     if os.path.exists(base_sql_path):
@@ -143,18 +138,14 @@ def main():
                     if proc_name in proc_dict:
                         continue
                         
-                    # Вычисляем относительный путь подкаталога (например, "Finance" или "Logistics")
                     rel_path = os.path.relpath(root, base_sql_path)
                     
-                    # Определяем ID папки в Google Drive
                     current_drive_folder_id = GOOGLE_FOLDER_ID
                     if rel_path != '.':
-                        # Если файл лежит в подпапке, воссоздаем это дерево папок в Google Drive
                         folder_parts = rel_path.split(os.sep)
                         for part in folder_parts:
                             current_drive_folder_id = get_or_create_drive_folder(service, part, current_drive_folder_id)
                     
-                    # Читаем SQL
                     with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
                         sql_content = f.read()
                     
@@ -163,17 +154,15 @@ def main():
                     
                     md_content = generate_proc_md(proc_name, header_info, tables)
                     
-                    # 1. Сохраняем .md локально в Git (в ту же подпапку, где лежит .sql)
                     with open(os.path.join(root, f"{proc_name}.md"), 'w', encoding='utf-8') as md_f:
                         md_f.write(md_content)
                     
-                    # 2. Льем в Google Drive в соответствующую папку
                     upload_to_drive(service, f"{proc_name}.md", md_content, current_drive_folder_id)
 
     proc_list = list(proc_dict.items())
     updated_map_content = update_main_db_map(proc_list)
     if updated_map_content:
-        # Корневую карту MAIN_DB.md кладем в корень папки Google Drive
+        # Теперь и на Google Диске главная карта MAIN_DB.md ляжет в корень целевой папки
         upload_to_drive(service, "MAIN_DB.md", updated_map_content, GOOGLE_FOLDER_ID)
 
 if __name__ == '__main__':
