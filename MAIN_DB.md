@@ -12,9 +12,6 @@ db_version: MS SQL Server 2019
 
 ## ⚙️ Хранимые процедуры (Stored Procedures)
 Физический путь: `MAIN_DB\StoredProcedure\`
-
-* **[[CREATE_DOC_HOME]]** — Создание внутреннего документа (логика автонумерации, параметры копирования).
-
 ## 📊 Таблицы (Tables)
 Физический путь: `MAIN_DB\Tables\`
 
