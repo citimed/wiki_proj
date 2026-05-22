@@ -20,9 +20,6 @@ GO
 -- 23.05.2026 Lukin E.V. - ntcn cvb
 -- ==========================================================
 
-
-
-
 CREATE PROCEDURE GIN_AFTER
   @DOCUM_ID T_IDENTIFIER,            -- код документа
   @MESSAGE  VARCHAR(240) = '' OUTPUT -- сообщение
