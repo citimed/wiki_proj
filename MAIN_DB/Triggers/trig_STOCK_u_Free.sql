@@ -20,7 +20,7 @@
 -- 29.12.25 star - замена UPDATE_PLU_QTY на CALC_ONE_PLU_QUAN
 -- ==========================================================
 ALTER TRIGGER trig_STOCK_u_Free ON STOCK
- FOR INSERT, UPDATE
+  FOR INSERT, UPDATE
 AS
 
 DECLARE @PLU_ID             T_PLU
