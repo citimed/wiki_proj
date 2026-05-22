@@ -18,7 +18,7 @@
 -- 22.04.05 star - STOCK_QUAN_FREE = STOCK_QUAN_ONHAND - STOCK_QUAN_DISTRIB
 -- 09.08.08 star - контроль за отриц. STOCK_QUAN_RESERV
 -- 29.12.25 star - замена UPDATE_PLU_QTY на CALC_ONE_PLU_QUAN
-------------------------------------------------------------------------------------------------------
+-- ==========================================================
 ALTER TRIGGER trig_STOCK_u_Free ON STOCK
  FOR INSERT, UPDATE
 AS
