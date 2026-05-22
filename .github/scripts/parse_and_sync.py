@@ -86,28 +86,39 @@ def update_main_db_map(proc_list):
     return updated_content
 
 def upload_to_drive(service, filename, content):
+    # Ищем файл, указывая параметр supportsAllDrives для Общих дисков
     query = f"name = '{filename}' and '{GOOGLE_FOLDER_ID}' in parents and trashed = false"
-    results = service.files().list(q=query, fields="files(id)").execute()
+    results = service.files().list(
+        q=query, 
+        fields="files(id)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
+    ).execute()
     items = results.get('files', [])
 
-    # Переводим в байты
     file_stream = io.BytesIO(content.encode('utf-8'))
-    
-    # ВАЖНО: Убираем resumable=True. Для маленьких файлов до 5МБ обычный upload 
-    # часто обходит ложные срабатывания квоты сервисных аккаунтов.
     media = MediaIoBaseUpload(file_stream, mimetype='text/markdown', resumable=False)
 
     if items:
         file_id = items[0]['id']
-        service.files().update(fileId=file_id, media_body=media).execute()
+        service.files().update(
+            fileId=file_id, 
+            media_body=media,
+            supportsAllDrives=True
+        ).execute()
         print(f"🔄 Синхронизирован в облако: {filename}")
     else:
         file_metadata = {
             'name': filename, 
             'parents': [GOOGLE_FOLDER_ID]
         }
-        # Используем fields="id", чтобы подтвердить успешное создание
-        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+        # Создаем файл в Общем диске организации
+        service.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields="id",
+            supportsAllDrives=True
+        ).execute()
         print(f"📥 Загружен новый в облако: {filename}")
 
 def main():
