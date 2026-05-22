@@ -7,8 +7,11 @@ from googleapiclient.http import MediaIoBaseUpload
 
 SERVICE_ACCOUNT_FILE = 'github_credentials.json' 
 GOOGLE_FOLDER_ID = os.environ.get('GOOGLE_FOLDER_ID') 
+
+# Пути к исходникам и новой локальной wiki
+BASE_MAIN_DB_PATH = './MAIN_DB/'
 SQL_FOLDER_PATH = './MAIN_DB/StoredProcedure/' 
-MAIN_DB_MAP_PATH = './MAIN_DB/MAIN_DB.md' # 🔥 ИЗМЕНИЛИ ПУТЬ: теперь файл живет внутри папки MAIN_DB
+MAIN_DB_MAP_PATH = './MAIN_DB/wiki/MAIN_DB.md' # 🔥 Карта теперь лежит в wiki
 
 def parse_sql_header_and_relations(sql_text):
     header_match = re.search(r'-- ===+.*?-- ===+', sql_text, re.DOTALL)
@@ -66,7 +69,11 @@ def generate_proc_md(proc_name, header_info, tables):
 
 def update_main_db_map(proc_list):
     if not os.path.exists(MAIN_DB_MAP_PATH):
-        return None
+        # Если папки wiki еще нет, создаем её для карты
+        os.makedirs(os.path.dirname(MAIN_DB_MAP_PATH), exist_ok=True)
+        # Создаем дефолтный файл карты, если он отсутствует
+        with open(MAIN_DB_MAP_PATH, 'w', encoding='utf-8') as f:
+            f.write("---\ntype: database_map\n---\n\n")
         
     with open(MAIN_DB_MAP_PATH, 'r', encoding='utf-8') as f:
         content = f.read()
@@ -113,14 +120,14 @@ def upload_to_drive(service, filename, content, target_folder_id):
     if items:
         file_id = items[0]['id']
         service.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
-        print(f"🔄 Обновлен: {filename}")
+        print(f"🔄 Обновлен в Drive: {filename}")
     else:
         file_metadata = {
             'name': filename, 
             'parents': [target_folder_id]
         }
         service.files().create(body=file_metadata, media_body=media, fields="id", supportsAllDrives=True).execute()
-        print(f"📥 Создан: {filename}")
+        print(f"📥 Создан в Drive: {filename}")
 
 def main():
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=['https://www.googleapis.com/auth/drive'])
@@ -137,15 +144,21 @@ def main():
                     
                     if proc_name in proc_dict:
                         continue
-                        
-                    rel_path = os.path.relpath(root, base_sql_path)
                     
+                    # 1. Вычисляем путь относительно папки MAIN_DB (например, "StoredProcedure/Finance")
+                    rel_path_from_db = os.path.relpath(root, BASE_MAIN_DB_PATH)
+                    
+                    # 2. Формируем локальный путь для сохранения MD (внутрь папки wiki)
+                    local_md_dir = os.path.join(BASE_MAIN_DB_PATH, 'wiki', rel_path_from_db)
+                    os.makedirs(local_md_dir, exist_ok=True)
+                    
+                    # 3. Разбираем структуру папок для Google Drive (БЕЗ слова wiki)
                     current_drive_folder_id = GOOGLE_FOLDER_ID
-                    if rel_path != '.':
-                        folder_parts = rel_path.split(os.sep)
-                        for part in folder_parts:
-                            current_drive_folder_id = get_or_create_drive_folder(service, part, current_drive_folder_id)
+                    folder_parts = rel_path_from_db.split(os.sep)
+                    for part in folder_parts:
+                        current_drive_folder_id = get_or_create_drive_folder(service, part, current_drive_folder_id)
                     
+                    # Читаем SQL
                     with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
                         sql_content = f.read()
                     
@@ -154,15 +167,17 @@ def main():
                     
                     md_content = generate_proc_md(proc_name, header_info, tables)
                     
-                    with open(os.path.join(root, f"{proc_name}.md"), 'w', encoding='utf-8') as md_f:
+                    # Записываем локально в репозиторий (внутри папки wiki)
+                    with open(os.path.join(local_md_dir, f"{proc_name}.md"), 'w', encoding='utf-8') as md_f:
                         md_f.write(md_content)
                     
+                    # Отправляем в Google Drive в чистую структуру
                     upload_to_drive(service, f"{proc_name}.md", md_content, current_drive_folder_id)
 
     proc_list = list(proc_dict.items())
     updated_map_content = update_main_db_map(proc_list)
     if updated_map_content:
-        # Теперь и на Google Диске главная карта MAIN_DB.md ляжет в корень целевой папки
+        # Корневую карту MAIN_DB.md отправляем в корень Google Drive
         upload_to_drive(service, "MAIN_DB.md", updated_map_content, GOOGLE_FOLDER_ID)
 
 if __name__ == '__main__':
