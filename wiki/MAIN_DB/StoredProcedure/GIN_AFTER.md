@@ -10,7 +10,7 @@ dialect: T-SQL
 ```text
 Procedure: dbo.GIN_AFTER
 Author: machok
-Realise: 2023.02.06 (дата создания)
+Release: 2023.02.06
 Description: процесс после обработки ПТО
 
 Changelog:
