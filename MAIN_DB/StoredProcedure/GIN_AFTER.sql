@@ -1,5 +1,5 @@
 IF OBJECT_ID('GIN_AFTER') IS NOT NULL
-   DROP PROCEDURE GIN_AFTER
+  DROP PROCEDURE GIN_AFTER
 GO
 
 -- ==========================================================
