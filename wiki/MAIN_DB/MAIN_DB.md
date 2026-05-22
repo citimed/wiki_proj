@@ -14,4 +14,4 @@ type: database_map
 * **[[trig_LINK_DOC_i_d]]** — Описание не указано
 * **[[trig_OVERVALUE_PRICE_u_DocList]]** — Описание не указано
 * **[[trig_STOCK_d]]** — Описание не указано
-* **[[trig_STOCK_u_Free]]** — Описание не указано
+* **[[trig_STOCK_u_Free]]** — Отслеживание интегральных количеств по артикулу и размещениям
