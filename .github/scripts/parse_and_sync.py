@@ -67,23 +67,33 @@ def generate_proc_md(proc_name, header_info, tables):
     return "\n".join(parts)
 
 def update_main_db_map(proc_list):
+    # Если папки для карты физически нет на сервере, создаем её структуру
+    os.makedirs(os.path.dirname(MAIN_DB_MAP_PATH), exist_ok=True)
+    
+    # Если самого файла еще нет в Git, инициализируем его базовой структурой
     if not os.path.exists(MAIN_DB_MAP_PATH):
-        os.makedirs(os.path.dirname(MAIN_DB_MAP_PATH), exist_ok=True)
         with open(MAIN_DB_MAP_PATH, 'w', encoding='utf-8') as f:
-            f.write("---\ntype: database_map\n---\n\n")
+            f.write("# 🗺️ Карта Базы Данных MAIN_DB\n\n## ⚙️ Хранимые процедуры\n\n")
         
     with open(MAIN_DB_MAP_PATH, 'r', encoding='utf-8') as f:
         content = f.read()
         
+    # Формируем чистый список процедур
     lines_to_insert = [""]
     for proc_name, desc in sorted(proc_list):
         lines_to_insert.append(f"* **[[{proc_name}]]** — {desc}")
     lines_to_insert.append("")
     
     new_block = "\n".join(lines_to_insert)
+    
+    # Если маркеры по какой-то причине пропали из файла, добавляем их в конец
+    if "" not in content:
+        content += "\n\n## ⚙️ Хранимые процедуры\n\n"
+        
     pattern = r'.*?'
     updated_content = re.sub(pattern, new_block, content, flags=re.DOTALL)
     
+    # Сохраняем обновленную карту локально в Git
     with open(MAIN_DB_MAP_PATH, 'w', encoding='utf-8') as f:
         f.write(updated_content)
         
