@@ -2,27 +2,26 @@ IF OBJECT_ID('GIN_AFTER') IS NOT NULL
    DROP PROCEDURE GIN_AFTER
 GO
 
----------------------------------------------------------------------
--- NAME   : PROCEDURE GIN_AFTER
--- NOTE   : ������� ����� ��������� ��� 
--- RELEASE: 06.02.2023 machok
--- RELEASE: 18.03.2023 star - ���������
--- release: 16.05.2023 machok - �������� ������� ������ ���� 5
--- RELEASE: 23.06.2023 star - ���� �������� ���������� ����������� (���� 4)
--- RELEASE: 15.07.2023 star - rename for block 5
--- RELEASE: 10.01.2024 star - �������� � ���������� ����� ���������� � before
--- RELEASE: 30.09.2024 star - ��������� ���� �������, ���� ����������, ������ � �����-����
---                            (����� ����� CM_GIN_UPDATE_PLU)
--- RELEASE: 26.10.2025 star - ������ ����������� ���������� � �������� ������� �����������
--- RELEASE: 06.05.2025 star - ������ ������� ���������� ������� ���� ��� ��������� � ���
+-- ==========================================================
+-- Procedure: dbo.GIN_AFTER
+-- Author: machok
+-- Realise: 2023.02.06 (дата создания)
+-- Description: процесс после обработки ПТО 
 --
+-- Changelog:
+-- 18.03.2023 star - доработка
+-- 16.05.2023 machok - проверка прихода товара Блок 5
+-- 23.06.2023 star - фикс создания связанного перемещения (блок 4)
+-- 15.07.2023 star - rename for block 5
+-- 10.01.2024 star - проверка и обновление папки перенесено в before
+-- 30.09.2024 star - Обработки кода мориона, кода поставщика, УКТЗЭД и штрих-кода (через вызов CM_GIN_UPDATE_PLU)
+-- 26.10.2025 star - замена очередности переоценки и закрытия заказов поставщикам
+-- 06.05.2025 star - расчет средней скользящей учетной цены для артикулов в ПТО
+-- ==========================================================
 
-
---test
----------------------------------------------------------------------
 CREATE PROCEDURE GIN_AFTER
-   @DOCUM_ID T_IDENTIFIER,            -- ��� ���������
-   @MESSAGE  VARCHAR(240) = '' OUTPUT -- ���������
+   @DOCUM_ID T_IDENTIFIER,            -- код документа
+   @MESSAGE  VARCHAR(240) = '' OUTPUT -- сообщение
 AS 
 DECLARE
   @result int;
@@ -161,13 +160,13 @@ BEGIN
   exec GET_NEW_BARCODE  @IsPiece = 2, @NewBarCode = @NewBarCode output
   if (@@error <> 0)
   begin
-    set @message = '������ ��������� �����-���� ��� �������� '+ @PLU_ID
+    set @message = 'Ошибка генерации штрих-кода для артикула '+ @PLU_ID
     RAISERROR(@message,16,1)
     break    
   end
   if (isnull(@NewBarCode,'')='')
   begin
-    set @message = '������ �����-��� ��� �������� '+ @PLU_ID
+    set @message = 'Пустой штрих-код для артикула '+ @PLU_ID
     RAISERROR(@message,16,1)
     break    
   end
@@ -177,14 +176,14 @@ BEGIN
       WHERE CNS_ID = @CNS_ID
     if (@@error <> 0)
     begin
-      set @message = '������ ������ �����-���� ��� �������� '+ @PLU_ID
+      set @message = 'Ошибка записи штрих-кода для артикула '+ @PLU_ID
       RAISERROR(@message,16,1)
       break    
     end    
   end
   else
   begin    
-    if @LOT_DOC_ID is null -- ������� ������
+    if @LOT_DOC_ID is null -- создаем партию
     begin
       SELECT top 1 @CNS_ID = c.CNS_ID
        FROM CONSIGNMENT c
@@ -207,7 +206,7 @@ BEGIN
       end
       if (@@error <> 0)
       begin
-        set @message = '������ �������� ��������� ������ ��� �������� '+ @PLU_ID
+        set @message = 'Ошибка создания прототипа партии для артикула '+ @PLU_ID
         RAISERROR(@message,16,1)
         break    
       end
@@ -217,7 +216,7 @@ BEGIN
           AND LOT_DOC_TYPE = 14
     if (@@error <> 0)
     begin
-      set @message = '������ ���������� ��������� ������ ��� �������� '+ @PLU_ID
+      set @message = 'Ошибка обновления прототипа партии для артикула '+ @PLU_ID
       RAISERROR(@message,16,1)
       break    
     end
@@ -234,14 +233,14 @@ END TRY  -- block 1
 begin CATCH
   IF @@TRANCOUNT > 0  
     ROLLBACK TRANSACTION
-  SET @MESSAGE = '���� 1, ������:'+char(13)+char(10)
+  SET @MESSAGE = 'Блок 1, ошибка:'+char(13)+char(10)
                + ERROR_MESSAGE()
   --SET @Result=1
-  return 1;  -- ���� 1, ������
+  return 1;  -- Блок 1, ошибка
 END CATCH
 
 -- BLOCK 3 ----------------------------------------------------------
--- ������ ����������� ���������� � �������� ������� ����������� 
+-- замена очередности переоценки и закрытия заказов поставщикам 
 BEGIN TRY
 BEGIN TRANSACTION
   --BIF01_GIN_CR_OVP_AND_TRANSF
@@ -256,14 +255,14 @@ BEGIN TRANSACTION
 
     IF @@ERROR <> 0 OR @result <> 0 OR ISNULL(@id_child, 0) <= 0
     BEGIN
-      RAISERROR('������ �������� ���� ����������.',16,1)
+      RAISERROR('Ошибка создания акта переоценки.',16,1)
     END;
 
     EXEC @result = dbo.CLOSE_LINE_OVERPRICE @docum_id = @id_child;
     IF @@ERROR <> 0
        OR @result <> 0
     BEGIN
-      RAISERROR('������ ��������� ���� ����������.',16,1)
+      RAISERROR('Ошибка обработки акта переоценки.',16,1)
     END;
 
 COMMIT TRANSACTION
@@ -273,17 +272,17 @@ END TRY  -- block 3
 begin CATCH
   IF @@TRANCOUNT > 0  
     ROLLBACK TRANSACTION
-  SET @MESSAGE = '���� 3, ������ �������� ���������� �� ���:'+char(13)+char(10)
+  SET @MESSAGE = 'Блок 3, ошибка создания переоценки по ПТО:'+char(13)+char(10)
                + ERROR_MESSAGE()
-  return 3;  -- ���� 3, ������
+  return 3;  -- Блок 3, ошибка
 END CATCH
 
 -- BLOCK 7 ----------------------------------------------------------
--- ������ ������� ���������� ������� ���� ��� ��������� � ���
+-- расчет средней скользящей учетной цены для артикулов в ПТО
 
 BEGIN TRY
   BEGIN TRANSACTION
-  -- �� ���������
+  -- по артикулам
   DECLARE cost_20260427 CURSOR FAST_FORWARD READ_ONLY LOCAL FOR
     SELECT l.LINE_PLU_ID
          , SUM(l.LINE_QUAN) 
@@ -300,7 +299,7 @@ BEGIN TRY
     IF (@@FETCH_STATUS <> 0) 
       BREAK;
   
-  -- �������
+  -- считаем
   EXEC CM_COST_AVG_CALC
         @PLU_ID    = @GIN_PLU_ID
       , @CALC_DT   = @DOCEXTGOODS_DATE_COMMIT
@@ -308,13 +307,13 @@ BEGIN TRY
       , @NEW_COST  = @GIN_PRICE
       , @COST_AVG  = @COST_AVG  OUTPUT
 
-  -- ����� � �������
+  -- пишем в историю
   EXEC CM_COST_AVG_INSERT
-        @PLU_ID   = @GIN_PLU_ID    -- �������
-      , @COST_DT  = @DOCEXTGOODS_DATE_COMMIT      -- ���� ������� ����
-      , @DOC_TYPE = 14             -- ��� ���������, �� �������� �������������� ����
-      , @DOC_ID   = @DOCUM_ID      -- ��� ���������, ***
-      , @COST_AVG = @COST_AVG      -- ���� ���������� ������� �������   
+        @PLU_ID   = @GIN_PLU_ID    -- артикул
+      , @COST_DT  = @DOCEXTGOODS_DATE_COMMIT      -- дата расчета цены
+      , @DOC_TYPE = 14             -- тип документа, по которому рассчитывалась цена
+      , @DOC_ID   = @DOCUM_ID      -- код документа, ***
+      , @COST_AVG = @COST_AVG      -- цена скользящая средняя учетная   
   END
   CLOSE cost_20260427;
   DEALLOCATE cost_20260427;
@@ -324,12 +323,12 @@ END TRY
 BEGIN CATCH
   IF @@TRANCOUNT > 0  
     ROLLBACK TRANSACTION
---  SET @MESSAGE = '���� 7, ������ ������� ���������� ������� ��� ���������:'+char(13)+char(10)
+--  SET @MESSAGE = 'Блок 7, расчет средней скользящей учетной для артикулов:'+char(13)+char(10)
 --               + ERROR_MESSAGE()
 END CATCH
 
 -- BLOCK 2 ----------------------------------------------------------
--- ������ ����������� ���������� � �������� ������� �����������
+-- замена очередности переоценки и закрытия заказов поставщикам
 BEGIN TRY
 BEGIN TRANSACTION
 --_CLOSE_PURCHASE_ORDER_BY_GIN
@@ -344,10 +343,10 @@ DECLARE @orders TABLE
     ORDER_DATE          datetime
 );
 
--- ������� ��� �������� ������ 
+-- получим все активные заказы 
 INSERT INTO @orders 
   ( ORDER_DOCUM_ID, ORDER_LOCATION_ID, ORDER_ENTERPRISE_ID, ORDER_DATE)
--- ������ �� ������ � ���������� ���������
+-- приход на аптеку и конкретный поставщик
 SELECT po.DOCUM_ID, po.LOCATION_ID, po.ENTERPRISE_ID, po.DOCUM_DATE
     FROM dbo.REMOTE_POINT rp
     JOIN dbo.PURCHASE_ORDER po ON
@@ -360,7 +359,7 @@ SELECT po.DOCUM_ID, po.LOCATION_ID, po.ENTERPRISE_ID, po.DOCUM_DATE
     WHERE rp.LOCATION_ID = @LOCATION_ID
       AND (PATINDEX('A%', rp.REMPOINT_ID) > 0 AND PATINDEX('A0', rp.REMPOINT_ID) = 0 )
 UNION ALL
--- ������ �� ������ � ����������� ���������
+-- приход на аптеку и технический поставщик
 SELECT po.DOCUM_ID, po.LOCATION_ID, po.ENTERPRISE_ID, po.DOCUM_DATE
     FROM dbo.REMOTE_POINT rp
     JOIN dbo.PURCHASE_ORDER po ON
@@ -373,7 +372,7 @@ SELECT po.DOCUM_ID, po.LOCATION_ID, po.ENTERPRISE_ID, po.DOCUM_DATE
     WHERE rp.LOCATION_ID = @LOCATION_ID
       AND (PATINDEX('A%', rp.REMPOINT_ID) > 0 AND PATINDEX('A0', rp.REMPOINT_ID) = 0 )
 UNION ALL
--- ������ �� �� ������ � ���������� ���������
+-- приход не на аптеку и конкретный поставщик
 SELECT po.DOCUM_ID, po.LOCATION_ID, po.ENTERPRISE_ID, po.DOCUM_DATE
     FROM dbo.REMOTE_POINT rp
     JOIN dbo.PURCHASE_ORDER po ON
@@ -385,12 +384,12 @@ SELECT po.DOCUM_ID, po.LOCATION_ID, po.ENTERPRISE_ID, po.DOCUM_DATE
                                 AND po.LIABILITY_CLEARDISTRIB_DT IS NOT NULL
     WHERE rp.LOCATION_ID IN (
               SELECT rp2.LOCATION_ID FROM dbo.REMOTE_POINT rp2 
-                WHERE PATINDEX('������%', rp2.REMPOINT_NAME) = 0 )
+                WHERE PATINDEX('АПТЕКА%', rp2.REMPOINT_NAME) = 0 )
       AND @LOCATION_ID IN (
               SELECT rp2.LOCATION_ID FROM dbo.REMOTE_POINT rp2 
-                WHERE PATINDEX('������%', rp2.REMPOINT_NAME) = 0 )
+                WHERE PATINDEX('АПТЕКА%', rp2.REMPOINT_NAME) = 0 )
 UNION ALL
--- ������ �� �� ������ � ����������� ���������
+-- приход не на аптеку и технический поставщик
 SELECT po.DOCUM_ID, po.LOCATION_ID, po.ENTERPRISE_ID, po.DOCUM_DATE
     FROM dbo.REMOTE_POINT rp
     JOIN dbo.PURCHASE_ORDER po ON
@@ -402,10 +401,10 @@ SELECT po.DOCUM_ID, po.LOCATION_ID, po.ENTERPRISE_ID, po.DOCUM_DATE
                                 AND po.LIABILITY_CLEARDISTRIB_DT IS NOT NULL
     WHERE rp.LOCATION_ID IN (
               SELECT rp2.LOCATION_ID FROM dbo.REMOTE_POINT rp2 
-                WHERE PATINDEX('������%', rp2.REMPOINT_NAME) = 0 )
+                WHERE PATINDEX('АПТЕКА%', rp2.REMPOINT_NAME) = 0 )
       AND @LOCATION_ID IN (
               SELECT rp2.LOCATION_ID FROM dbo.REMOTE_POINT rp2 
-                WHERE PATINDEX('������%', rp2.REMPOINT_NAME) = 0 );
+                WHERE PATINDEX('АПТЕКА%', rp2.REMPOINT_NAME) = 0 );
 
 DECLARE cr_gin CURSOR FAST_FORWARD READ_ONLY LOCAL FOR
     SELECT LINE_ID, LINE_PLU_ID, LINE_QUAN, a.ANALOG_GROUP_ID
@@ -445,24 +444,24 @@ BEGIN
 
       set @DONE_QTY = @ORDER_QTY - @ORDER_QTY_DONE;
 
-      -- ���� ��������� ������ ��� �����, ��� � ������.
+      -- если закрываем больше или равно, чем в заказе.
       IF @GIN_QTY >= @DONE_QTY
       BEGIN
-          -- ��������� ���� "���������� ���-��"
+          -- установим поле "поставлено кол-во"
           UPDATE dbo.LINE_PURCHASE_ORDER
             SET ORDSU_L_QUAN = @ORDER_QTY
           WHERE LINE_ID = @ORDER_LINE_ID;
 
-          -- ������� ������ ������
+          -- закроем строку заказа
           EXEC dbo.CLOSE_LINE_PURCHASEORD
                     @docum_id = @ORDER_DOCUM_ID, @line_id = @ORDER_LINE_ID;
 
           set @GIN_QTY = @GIN_QTY - @DONE_QTY;
       END
-      else -- ���� ��������� ������, ��� � ������. ����� ������ ������ ������.
+      else -- если закрываем меньше, чем в заказе. Тогда дробим строку заказа.
       -- IF @GIN_QTY < @ORDER_QTY
       BEGIN
-          -- ��������� ���� "���������� ���-��"
+          -- установим поле "поставлено кол-во"
           UPDATE dbo.LINE_PURCHASE_ORDER
             SET ORDSU_L_QUAN = isnull(ORDSU_L_QUAN,0) + @GIN_QTY
           WHERE LINE_ID = @ORDER_LINE_ID;
@@ -470,7 +469,7 @@ BEGIN
           set @ORDER_QTY = @GIN_QTY
           set @GIN_QTY = 0;
       END;
-      -- ������� � ����������� �������
+      -- запишем в линковочную таблицу
       if(@ORDER_ENTERPRISE_ID IN ( '-1', '-2' ))
       begin
         INSERT INTO dbo._LINK_GIN_PURCHASE_ORDER 
@@ -505,7 +504,7 @@ BEGIN
 
       if(@ORDER_LINE_ID is not null)
       begin
-          -- ������� �������
+          -- добавим излишек
           UPDATE dbo.LINE_PURCHASE_ORDER
             SET ORDSU_L_QUAN = isnull(ORDSU_L_QUAN,0) + @GIN_QTY
           WHERE LINE_ID = @ORDER_LINE_ID;
@@ -534,14 +533,14 @@ END TRY  -- block 2
 begin CATCH
   IF @@TRANCOUNT > 0  
     ROLLBACK TRANSACTION
-  SET @MESSAGE = '���� 2, ������ ��������� ������� �����������:'+char(13)+char(10)
+  SET @MESSAGE = 'Блок 2, ошибка обработки заказов поставщикам:'+char(13)+char(10)
                + ERROR_MESSAGE()
   --SET @Result=1
-  return 2;  -- ���� 2, ������
+  return 2;  -- Блок 2, ошибка
 END CATCH
 
 -- BLOCK 5 ----------------------------------------------------------
--- �������� ������� ������ �� ������ �����
+-- проверки прихода товара по заказу аптек
 BEGIN TRY
   BEGIN TRANSACTION
 
@@ -549,26 +548,26 @@ BEGIN TRY
 
   IF @result <> 0 
   BEGIN
-      RAISERROR('������ �������� ������� ��������',16,1)
+      RAISERROR('Ошибка проверки заказов клиентов',16,1)
   END;
   COMMIT TRANSACTION
 END TRY
 BEGIN CATCH
   IF @@TRANCOUNT > 0  
     ROLLBACK TRANSACTION
-  SET @MESSAGE = '���� 5, �������� ������� ������ �� ������ �����:'+char(13)+char(10)
+  SET @MESSAGE = 'Блок 5, проверки прихода товара по заказу аптек:'+char(13)+char(10)
                + ERROR_MESSAGE()
-  return 5;  -- ���� 5, ������
+  return 5;  -- Блок 5, ошибка
 END CATCH
 
 -- BLOCK from 3 to 4 ------------------------------------------------
--- �������� ������������� �������� �����������
-IF (@GIN_COMMENT = 4) -- ��� ��� ����������
+-- проверка необходимости создания перемещения
+IF (@GIN_COMMENT = 4) -- ПТО без автоматики
 BEGIN
   GOTO finish_BIF01_GIN_CR_OVP_AND_TRANSF;
 END;
 
--- ������� ����� �������
+-- получим адрес объекта
 set @rempoint ='';
 SELECT @rempoint = ISNULL(r.REMPOINT_ID,'')
   FROM dbo.REMOTE_POINT r 
@@ -576,18 +575,18 @@ SELECT @rempoint = ISNULL(r.REMPOINT_ID,'')
     AND (  r.REMPOINT_ID LIKE 'RC%' OR r.REMPOINT_ID LIKE 'A%' 
         OR r.LOCATION_DEP_ID = @LOCATION_DEP_ID);
 
--- ���� ��� ������
+-- если это аптека
 IF (@rempoint like 'A%')
 BEGIN
-  SELECT @OUT_LOCATION_ID = @LOCATION_ID, -- ����
+  SELECT @OUT_LOCATION_ID = @LOCATION_ID, -- куда
          @OUT_LOCATION_DEP_ID = 2;
 END
-ELSE IF @LOCATION_ID = 36   -- �������� ����������� �������� ��������� ��� ��2
+ELSE IF @LOCATION_ID = 36   -- создание перемещения временно отключено для РЦ2
 BEGIN
   GOTO finish_BIF01_GIN_CR_OVP_AND_TRANSF;
 END;
 
---���������� ������ ��� �� ��-�������� ��� ������-�����
+--пропускаем только ПТО на РЦ-обменный или Аптека-склад
 IF NOT (  (@rempoint like 'RC%' AND @LOCATION_DEP_ID=2)
        OR (@rempoint like 'A%' AND @LOCATION_DEP_ID=1) )
   GOTO finish_BIF01_GIN_CR_OVP_AND_TRANSF;
@@ -603,11 +602,11 @@ BEGIN TRANSACTION
 
     IF @@ERROR <> 0 OR @result <> 0
     BEGIN
-      RAISERROR('������ ������������ �����������.',16,1)
+      RAISERROR('Ошибка формирования перемещения.',16,1)
     END;
 
     UPDATE dbo.TRANSFER SET
-        OUT_LOCATION_ID = @LOCATION_ID, -- ����
+        OUT_LOCATION_ID = @LOCATION_ID, -- куда
         OUT_LOCATION_DEP_ID = CASE WHEN @LOCATION_ID IN ( 34, 36 ) THEN 1
                                    ELSE @OUT_LOCATION_DEP_ID END, 
         OUT_LOCATION_SUBDEP_ID = @LOCATION_SUBDEP_ID,
@@ -620,24 +619,24 @@ BEGIN TRANSACTION
 
     IF (@@error <> 0) OR (@result <> 0)
     BEGIN
-      RAISERROR('������ ��� ��������� ����� �����������',16,1)
+      RAISERROR('Ошибка при пересчете суммы перемещения',16,1)
     END;
 
-    -- ��� ������ �����-����� = ������������
-    -- ��� �� ��������-�������� = �� ������������
-    -- ���� ������, ����� ��������
+    -- для аптеки склад-касса = обрабатываем
+    -- для РЦ обменный-отгрузки = НЕ обрабатываем
+    -- если аптека, тогда проведем
     IF (@rempoint like 'A%') AND (@OUT_LOCATION_DEP_ID = 2)
     BEGIN
       EXEC @result = dbo.CLOSE_LINE_TRANSFER @DOCUM_ID = @id_child;
 
       IF (@result <> 0)
       BEGIN
-        RAISERROR('�� ������� ������� ��������� �� �����������',16,1)
+        RAISERROR('Не удалось закрыть накладную на перемещение',16,1)
       END;
     END
     ELSE
     BEGIN
-      --���� ����������� ����� �������� - ��������, ����� ��������� 
+      --если перемещение склад обменный - отгрузка, тогда блокируем 
       UPDATE dbo.TRANSFER SET COMMENT = 15
         WHERE DOCUM_ID = @id_child;
     END;
@@ -649,16 +648,16 @@ END TRY
 begin CATCH
   IF @@TRANCOUNT > 0  
     ROLLBACK TRANSACTION
-  SET @MESSAGE = '���� 4, ������ �������� �����������:'+char(13)+char(10)
+  SET @MESSAGE = 'Блок 4, ошибка создания перемещения:'+char(13)+char(10)
                + ERROR_MESSAGE()
-  return 4;  -- ���� 4, ������
+  return 4;  -- Блок 4, ошибка
 END CATCH
 
 finish_BIF01_GIN_CR_OVP_AND_TRANSF:
 --BIF01_GIN_CR_OVP_AND_TRANSF
 
 -- BLOCK 6 ----------------------------------------------------------
--- �������� ��������
+-- Привязки артикула
 BEGIN TRY
   BEGIN TRANSACTION
 
@@ -675,9 +674,9 @@ END TRY
 BEGIN CATCH
   IF @@TRANCOUNT > 0  
     ROLLBACK TRANSACTION
-  SET @MESSAGE = '���� 6, �������� ��������:'+char(13)+char(10)
+  SET @MESSAGE = 'Блок 6, Привязки артикула:'+char(13)+char(10)
                + ERROR_MESSAGE()
-  return 6;  -- ���� 6, ������
+  return 6;  -- Блок 6, ошибка
 END CATCH
 
 finish_plu_link:
