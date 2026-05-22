@@ -81,7 +81,7 @@ SELECT @DOCEXTGOODS_CREDIT_TERMS = g.DOCEXTGOODS_CREDIT_TERMS,
 IF isnull(@DOCUM_STATE,0) < 5
   return 0;
 
--- BLOCK 1 ----------------------------------------------------------
+-- BLOCK 1 ---------------------------------------------------------- 
 BEGIN TRY
 BEGIN TRANSACTION
 
