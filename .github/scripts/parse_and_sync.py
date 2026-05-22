@@ -59,13 +59,16 @@ def generate_entity_md(name, header_info, tables, entity_type):
     else:
         relations_md = "*Связи не найдены*"
         
-    entity_labels = {
-        'stored_procedure': f"# ⚙️ `dbo.{name}` (Хранимая процедура)",
-        'table': f"# 📊 `dbo.{name}` (Таблица)",
-        'trigger': f"# 🪤 `dbo.{name}` (Триггер)",
-        'view': f"# 👁️ `dbo.{name}` (Представление/View)",
-        'sql_script': f"# 📝 `dbo.{name}` (Скрипт)"
+    # Красивые человекочитаемые названия типов для заголовка
+    type_labels_ru = {
+        'stored_procedure': 'Хранимая процедура',
+        'table': 'Таблица данных',
+        'trigger': 'Триггер',
+        'view': 'Представление (View)',
+        'sql_script': 'Скрипт'
     }
+    
+    current_type_ru = type_labels_ru.get(entity_type, 'Объект БД')
         
     parts = [
         "---",
@@ -74,7 +77,8 @@ def generate_entity_md(name, header_info, tables, entity_type):
         "dialect: T-SQL",
         "---",
         "",
-        entity_labels.get(entity_type, f"# `{name}`"),
+        # 🔥 Динамический заголовок: # ⚙️ `dbo.GIN_AFTER` (Хранимая процедура)
+        f"# {get_entity_icon(entity_type)} dbo.{name} ({current_type_ru})",
         "",
         "## 📄 Метаданные и Описание",
         "```text",
@@ -85,6 +89,17 @@ def generate_entity_md(name, header_info, tables, entity_type):
         f"{relations_md}"
     ]
     return "\n".join(parts)
+
+def get_entity_icon(entity_type):
+    """Вспомогательная функция для иконок в заголовке"""
+    icons = {
+        'stored_procedure': '⚙️',
+        'table': '📊',
+        'trigger': '🪤',
+        'view': '👁️',
+        'sql_script': '📝'
+    }
+    return icons.get(entity_type, '📦')
 
 def update_db_map(db_name, entity_registry):
     map_path = f'./wiki/{db_name}/{db_name}.md'
