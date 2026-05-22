@@ -8,6 +8,10 @@ on:
       - 'MAIN_DB/StoredProcedure/**.sql'
       - 'MAIN_DB.md'
 
+# Включаем поддержку Node.js 24 для всех экшенов, чтобы убрать предупреждение
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   build-and-sync:
     runs-on: ubuntu-latest
