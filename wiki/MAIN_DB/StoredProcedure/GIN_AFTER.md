@@ -8,7 +8,7 @@ dialect: T-SQL
 
 ## 📄 Метаданные и Описание
 ```text
-Procedure: dbo.GIN_AFTER
+Name: dbo.GIN_AFTER
 Author: machok
 Release: 2023.02.06
 Description: процесс после обработки ПТО
