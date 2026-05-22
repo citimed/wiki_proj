@@ -6,7 +6,7 @@ GO
 -- Procedure: dbo.GIN_AFTER
 -- Author: machok
 -- Realise: 2023.02.06 (дата создания)
--- Description: процесс после обработки ПТО 
+-- Description: процесс после обработки ПТО
 --
 -- Changelog:
 -- 18.03.2023 star - доработка
