@@ -53,7 +53,6 @@ def get_entity_type_info(root_path):
         return 'sql_script', '📝', 'Прочие скрипты'
 
 def generate_entity_md(name, header_info, tables, entity_type):
-    """Оставляем генерацию MD для локальной папки wiki/"""
     if tables:
         relations_md = "\n".join([f"* **Связан с сущностью:** `[[{t}]]`" for t in tables])
     else:
@@ -69,59 +68,14 @@ def generate_entity_md(name, header_info, tables, entity_type):
     current_type_ru = type_labels_ru.get(entity_type, 'Объект БД')
         
     parts = [
-        "---",
-        f"type: {entity_type}",
-        "db_version: MS SQL Server 2019",
-        "dialect: T-SQL",
-        "---",
-        "",
-        f"# {get_entity_icon(entity_type)} dbo.{name} ({current_type_ru})",
-        "",
-        "## 📄 Метаданные и Описание",
-        "```text",
-        f"{header_info}",
-        "```",
-        "",
-        "## 🔗 Автоматически найденные связи",
-        f"{relations_md}"
+        "---", f"type: {entity_type}", "db_version: MS SQL Server 2019", "dialect: T-SQL", "---", "",
+        f"# {get_entity_icon(entity_type)} dbo.{name} ({current_type_ru})", "",
+        "## 📄 Метаданные и Описание", "```text", f"{header_info}", "```", "",
+        "## 🔗 Автоматически найденные связи", f"{relations_md}"
     ]
     return "\n".join(parts)
 
-def generate_entity_html_for_google_doc(name, header_info, tables, entity_type):
-    """Генерируем HTML для красивого отображения внутри Google Docs"""
-    type_labels_ru = {
-        'stored_procedure': 'Хранимая процедура',
-        'table': 'Таблица данных',
-        'trigger': 'Триггер',
-        'view': 'Представления (Views)',
-        'sql_script': 'Скрипт'
-    }
-    current_type_ru = type_labels_ru.get(entity_type, 'Объект БД')
-    
-    relations_html = ""
-    if tables:
-        relations_html = "<ul>" + "".join([f"<li><b>Связан с сущностью:</b> {t}</li>" for t in tables]) + "</ul>"
-    else:
-        relations_html = "<p><i>Связи не найдены</i></p>"
-
-    html = f"""
-    <html>
-    <body>
-      <h1>{get_entity_icon(entity_type)} dbo.{name} ({current_type_ru})</h1>
-      <p><b>Диалект:</b> T-SQL (MS SQL Server 2019)</p>
-      
-      <h2>📄 Метаданные и Описание</h2>
-      <pre style="background-color: #f4f4f4; padding: 10px; border: 1px solid #ddd;">{header_info}</pre>
-      
-      <h2>🔗 Автоматически найденные связи</h2>
-      {relations_html}
-    </body>
-    </html>
-    """
-    return html
-
 def update_db_map_md(db_name, entity_registry):
-    """Карта для локального Obsidian"""
     map_path = f'./wiki/{db_name}/{db_name}.md'
     os.makedirs(os.path.dirname(map_path), exist_ok=True)
     
@@ -149,70 +103,26 @@ def update_db_map_md(db_name, entity_registry):
     with open(map_path, 'w', encoding='utf-8') as f: f.write(content)
     return content
 
-def generate_db_map_html(db_name, entity_registry):
-    """HTML Карта для Google Docs"""
-    categories = {
-        'table': ('📊 Таблицы данных', []), 'stored_procedure': ('⚙️ Хранимые процедуры', []),
-        'trigger': ('🪤 Триггеры', []), 'view': ('👁️ Представления (Views)', []), 'sql_script': ('📝 Прочие скрипты', [])
-    }
-    for name, info in entity_registry.items():
-        ent_type = info['type']
-        desc = info['desc']
-        if ent_type in categories: categories[ent_type][1].append((name, desc))
-            
-    sections_html = ""
-    for ent_type, (title, items) in categories.items():
-        if items:
-            sections_html += f"<h2>{title}</h2><ul>"
-            for name, desc in sorted(items, key=lambda x: x[0]):
-                sections_html += f"<li><b>{name}</b> — {desc}</li>"
-            sections_html += "</ul>"
-            
-    html = f"""
-    <html>
-    <body>
-      <h1>🗺️ Архитектурная карта базы данных {db_name}</h1>
-      <p>Автоматическая структура всех зарегистрированных объектов.</p>
-      {sections_html}
-    </body>
-    </html>
-    """
-    return html
-
-def get_or_create_drive_folder(service, folder_name, parent_id):
-    query = f"name = '{folder_name}' and '{parent_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-    results = service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
-    items = results.get('files', [])
-    if items: return items[0]['id']
-        
-    folder_metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [parent_id]}
-    folder = service.files().create(body=folder_metadata, fields='id', supportsAllDrives=True).execute()
-    return folder['id']
-
-def upload_to_google_doc(service, doc_name, html_content, target_folder_id):
-    """Создает или обновляет именно GOOGLE DOCUMENT из HTML"""
-    # Ищем существующий Google Doc с таким именем
+def upload_or_update_monolith_google_doc(service, doc_name, html_content, target_folder_id):
     query = f"name = '{doc_name}' and '{target_folder_id}' in parents and mimeType = 'application/vnd.google-apps.document' and trashed = false"
     results = service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
     items = results.get('files', [])
 
     file_stream = io.BytesIO(html_content.encode('utf-8'))
-    # Отправляем как HTML, но просим Google конвертировать в Документ
     media = MediaIoBaseUpload(file_stream, mimetype='text/html', resumable=False)
 
     if items:
         file_id = items[0]['id']
-        # При обновлении контента тип конвертации сохраняется
         service.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
-        print(f"🔄 Обновлен Google Doc: {doc_name}")
+        print(f"🔄 Монолитный документ обновлен на Диске: {doc_name}")
     else:
         file_metadata = {
             'name': doc_name, 
-            'mimeType': 'application/vnd.google-apps.document', # 🔥 Магия здесь: преобразуем в Google Doc
+            'mimeType': 'application/vnd.google-apps.document',
             'parents': [target_folder_id]
         }
         service.files().create(body=file_metadata, media_body=media, fields="id", supportsAllDrives=True).execute()
-        print(f"📥 Создан Google Doc: {doc_name}")
+        print(f"📥 Создан новый монолитный документ на Диске: {doc_name}")
 
 def get_entity_icon(entity_type):
     icons = {'stored_procedure': '⚙️', 'table': '📊', 'trigger': '🪤', 'view': '👁️', 'sql_script': '📝'}
@@ -223,6 +133,11 @@ def main():
     service = build('drive', 'v3', credentials=creds)
     
     db_registries = {db: {} for db in TARGET_DATABASES}
+    
+    # Структура для агрегации данных перед сборкой в единый HTML
+    db_monolith_data = {db: {
+        'table': [], 'stored_procedure': [], 'trigger': [], 'view': [], 'sql_script': []
+    } for db in TARGET_DATABASES}
     
     for db_name in TARGET_DATABASES:
         base_db_path = os.path.normpath(f'./{db_name}')
@@ -240,17 +155,11 @@ def main():
                     entity_type, icon, category_name = get_entity_type_info(root)
                     full_git_path = os.path.relpath(root, '.')
                     
-                    # Локально для Obsidian по-прежнему делаем .md структуры
+                    # Локально для Obsidian создаем .md структуру папок
                     local_md_dir = os.path.normpath(os.path.join('wiki', full_git_path))
                     os.makedirs(local_md_dir, exist_ok=True)
                     
-                    # В Облаке создаем структуру папок
-                    current_drive_folder_id = GOOGLE_FOLDER_ID
-                    folder_parts = full_git_path.split(os.sep)
-                    for part in folder_parts:
-                        current_drive_folder_id = get_or_create_drive_folder(service, part, current_drive_folder_id)
-                    
-                    # Чтение файла с подбором кодировок
+                    # Чтение файла с автоподбором кодировок
                     file_full_path = os.path.join(root, file)
                     sql_content = None
                     for encoding_variant in ['utf-8', 'utf-16', 'windows-1251']:
@@ -263,7 +172,6 @@ def main():
                     if sql_content is None: continue
                     
                     header_info, tables, description = parse_sql_header_and_relations(sql_content)
-                    
                     db_registries[db_name][entity_name] = {'type': entity_type, 'desc': description}
                     
                     # 1. Запись локального .md для Obsidian
@@ -271,19 +179,68 @@ def main():
                     with open(os.path.join(local_md_dir, f"{entity_name}.md"), 'w', encoding='utf-8') as md_f:
                         md_f.write(md_content)
                     
-                    # 2. Отправка в Google Drive в виде GOOGLE DOC (передаем имя без расширений)
-                    html_doc_content = generate_entity_html_for_google_doc(entity_name, header_info, tables, entity_type)
-                    upload_to_google_doc(service, entity_name, html_doc_content, current_drive_folder_id)
+                    # 2. Накапливаем данные для монолита Google Doc
+                    db_monolith_data[db_name][entity_type].append({
+                        'name': entity_name,
+                        'header_info': header_info,
+                        'tables': tables,
+                        'desc': description
+                    })
 
-        # Синхронизация карт
+        # Сборка монолитного документа, если найдены объекты в БД
         if db_registries[db_name]:
-            # Карта для локального Git
+            # Карта для Obsidian
             update_db_map_md(db_name, db_registries[db_name])
             
-            # Карта для Google Drive (как Google Doc)
-            map_html = generate_db_map_html(db_name, db_registries[db_name])
-            db_root_drive_id = get_or_create_drive_folder(service, db_name, GOOGLE_FOLDER_ID)
-            upload_to_google_doc(service, db_name, map_html, db_root_drive_id)
+            # Генерация красивого HTML-документа для Google Drive
+            type_titles_ru = {
+                'table': '📊 Таблицы данных', 'stored_procedure': '⚙️ Хранимые процедуры',
+                'trigger': '🪤 Триггеры', 'view': '👁️ Представления (Views)', 'sql_script': '📝 Прочие скрипты'
+            }
+            
+            html_parts = []
+            html_parts.append(f"<html><body><h1>🗺️ Архитектура и объекты базы данных {db_name}</h1>")
+            html_parts.append(f"<p>Документ сгенерирован автоматически. Содержит полное описание структуры, метаданных и связей.</p>")
+            
+            # Внутреннее оглавление документа с анкорами (для удобной навигации)
+            html_parts.append("<h2>🗺️ Интерактивная карта базы данных</h2>")
+            for ent_type, title in type_titles_ru.items():
+                items = db_monolith_data[db_name][ent_type]
+                if items:
+                    html_parts.append(f"<h3>{title}</h3><ul>")
+                    for item in sorted(items, key=lambda x: x['name']):
+                        html_parts.append(f"<li><b><a href='#entity_{item['name']}'>{item['name']}</a></b> — {item['desc']}</li>")
+                    html_parts.append("</ul>")
+            
+            html_parts.append("<hr style='border: 2px solid #333; margin: 40px 0;'>")
+            
+            # Разворачиваем полную информацию по каждому объекту
+            for ent_type, title in type_titles_ru.items():
+                items = db_monolith_data[db_name][ent_type]
+                if items:
+                    html_parts.append(f"<h1 style='color: #1a5f7a;'>{title}</h1>")
+                    for item in sorted(items, key=lambda x: x['name']):
+                        html_parts.append(f"<div id='entity_{item['name']}' style='margin-bottom: 50px; page-break-inside: avoid;'>")
+                        html_parts.append(f"<h2 style='border-bottom: 1px solid #ccc; padding-bottom: 5px;'>{get_entity_icon(ent_type)} dbo.{item['name']}</h2>")
+                        
+                        html_parts.append("<h3>📄 Метаданные и Описание</h3>")
+                        html_parts.append(f"<pre style='background-color: #f8f9fa; padding: 15px; border: 1px solid #e2e8f0; font-family: monospace; white-space: pre-wrap;'>{item['header_info']}</pre>")
+                        
+                        html_parts.append("<h3>🔗 Автоматически найденные связи</h3>")
+                        if item['tables']:
+                            html_parts.append("<ul>")
+                            for t in item['tables']:
+                                html_parts.append(f"<li><b>Связан с сущностью:</b> <a href='#entity_{t}'>{t}</a></li>")
+                            html_parts.append("</ul>")
+                        else:
+                            html_parts.append("<p><i>Связи не найдены</i></p>")
+                        html_parts.append("</div>")
+            
+            html_parts.append("</body></html>")
+            full_html_content = "\n".join(html_parts)
+            
+            # Заливаем ОДИН монолитный файл для текущей БД в корень указанной папки на Google Диске
+            upload_or_update_monolith_google_doc(service, db_name, full_html_content, GOOGLE_FOLDER_ID)
 
 if __name__ == '__main__':
     main()
