@@ -202,8 +202,22 @@ def main():
                     for part in folder_parts:
                         current_drive_folder_id = get_or_create_drive_folder(service, part, current_drive_folder_id)
                     
-                    with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
-                        sql_content = f.read()
+                    # Безопасное чтение файла с поддержкой разных кодировок (UTF-8, UTF-16, ANSI)
+                    file_full_path = os.path.join(root, file)
+                    sql_content = None
+                    
+                    for encoding_variant in ['utf-8', 'utf-16', 'windows-1251']:
+                        try:
+                            with open(file_full_path, 'r', encoding=encoding_variant) as f:
+                                sql_content = f.read()
+                            print(f"   └─ Кодировка определена как: {encoding_variant}")
+                            break
+                        except (UnicodeDecodeError, re.error):
+                            continue
+                    
+                    if sql_content is None:
+                        print(f"❌ Ошибка: Не удалось прочитать файл {file_full_path}. Неизвестная кодировка. Пропускаем.")
+                        continue
                     
                     header_info, tables, description = parse_sql_header_and_relations(sql_content)
                     
