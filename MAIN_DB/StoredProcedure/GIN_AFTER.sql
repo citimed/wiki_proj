@@ -108,7 +108,7 @@ END
 
 --LINKPROCESS_GIN_CHECK_EDRPOU
 if charindex(' ',@DOCUM_EXTCOMMENT) > 1 and 
-     ISNUMERIC(substring(@DOCUM_EXTCOMMENT, 1, charindex(' ',@DOCUM_EXTCOMMENT)-1)) = 1
+    ISNUMERIC(substring(@DOCUM_EXTCOMMENT, 1, charindex(' ',@DOCUM_EXTCOMMENT)-1)) = 1
 begin
   SET @ENTERPRISE_COD = substring(@DOCUM_EXTCOMMENT, 1, charindex(' ',@DOCUM_EXTCOMMENT)-1)
   
