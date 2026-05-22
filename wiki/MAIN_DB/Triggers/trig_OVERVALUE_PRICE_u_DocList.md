@@ -4,7 +4,7 @@ db_version: MS SQL Server 2019
 dialect: T-SQL
 ---
 
-# 🪤 `dbo.trig_OVERVALUE_PRICE_u_DocList` (Триггер)
+# 🪤 dbo.trig_OVERVALUE_PRICE_u_DocList (Триггер)
 
 ## 📄 Метаданные и Описание
 ```text

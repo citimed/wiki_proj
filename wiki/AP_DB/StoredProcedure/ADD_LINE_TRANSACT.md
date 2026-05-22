@@ -4,7 +4,7 @@ db_version: MS SQL Server 2019
 dialect: T-SQL
 ---
 
-# ⚙️ `dbo.ADD_LINE_TRANSACT` (Хранимая процедура)
+# ⚙️ dbo.ADD_LINE_TRANSACT (Хранимая процедура)
 
 ## 📄 Метаданные и Описание
 ```text

@@ -4,7 +4,7 @@ db_version: MS SQL Server 2019
 dialect: T-SQL
 ---
 
-# ⚙️ `dbo.CM_SPAY_PURCHASE` (Хранимая процедура)
+# ⚙️ dbo.CM_SPAY_PURCHASE (Хранимая процедура)
 
 ## 📄 Метаданные и Описание
 ```text

@@ -4,7 +4,7 @@ db_version: MS SQL Server 2019
 dialect: T-SQL
 ---
 
-# 🪤 `dbo.trig_LINK_DOC_i_d` (Триггер)
+# 🪤 dbo.trig_LINK_DOC_i_d (Триггер)
 
 ## 📄 Метаданные и Описание
 ```text

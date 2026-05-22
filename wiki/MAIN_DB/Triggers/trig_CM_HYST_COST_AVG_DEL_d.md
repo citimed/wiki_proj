@@ -4,7 +4,7 @@ db_version: MS SQL Server 2019
 dialect: T-SQL
 ---
 
-# 🪤 `dbo.trig_CM_HYST_COST_AVG_DEL_d` (Триггер)
+# 🪤 dbo.trig_CM_HYST_COST_AVG_DEL_d (Триггер)
 
 ## 📄 Метаданные и Описание
 ```text

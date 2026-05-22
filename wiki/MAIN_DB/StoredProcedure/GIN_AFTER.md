@@ -4,7 +4,7 @@ db_version: MS SQL Server 2019
 dialect: T-SQL
 ---
 
-# ⚙️ `dbo.GIN_AFTER` (Хранимая процедура)
+# ⚙️ dbo.GIN_AFTER (Хранимая процедура)
 
 ## 📄 Метаданные и Описание
 ```text

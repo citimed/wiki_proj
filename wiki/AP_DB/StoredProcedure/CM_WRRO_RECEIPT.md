@@ -4,7 +4,7 @@ db_version: MS SQL Server 2019
 dialect: T-SQL
 ---
 
-# ⚙️ `dbo.CM_WRRO_RECEIPT` (Хранимая процедура)
+# ⚙️ dbo.CM_WRRO_RECEIPT (Хранимая процедура)
 
 ## 📄 Метаданные и Описание
 ```text

@@ -4,7 +4,7 @@ db_version: MS SQL Server 2019
 dialect: T-SQL
 ---
 
-# ⚙️ `dbo.API_CREATE_TRANSACT_ONLINE` (Хранимая процедура)
+# ⚙️ dbo.API_CREATE_TRANSACT_ONLINE (Хранимая процедура)
 
 ## 📄 Метаданные и Описание
 ```text

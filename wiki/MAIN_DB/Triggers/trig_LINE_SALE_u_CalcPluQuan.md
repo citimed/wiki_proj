@@ -4,7 +4,7 @@ db_version: MS SQL Server 2019
 dialect: T-SQL
 ---
 
-# 🪤 `dbo.trig_LINE_SALE_u_CalcPluQuan` (Триггер)
+# 🪤 dbo.trig_LINE_SALE_u_CalcPluQuan (Триггер)
 
 ## 📄 Метаданные и Описание
 ```text
