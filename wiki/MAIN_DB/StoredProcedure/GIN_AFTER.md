@@ -12,7 +12,6 @@ Name: dbo.GIN_AFTER
 Author: machok
 Release: 2023.02.06
 Description: процесс после обработки ПТО
-
 Changelog:
 18.03.2023 star - доработка
 16.05.2023 machok - проверка прихода товара Блок 5
