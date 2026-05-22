@@ -3,7 +3,7 @@ IF OBJECT_ID('GIN_AFTER') IS NOT NULL
 GO
 
 -- ==========================================================
--- Procedure: dbo.GIN_AFTER
+-- Name: dbo.GIN_AFTER
 -- Author: machok
 -- Release: 2023.02.06 
 -- Description: процесс после обработки ПТО
