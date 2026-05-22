@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'MAIN_DB/StoredProcedure/**.sql'
-      - 'MAIN_DB/wiki/MAIN_DB.md' # 🔥 Путь к карте базы данных теперь тоже в wiki
+      - 'wiki/MAIN_DB/MAIN_DB.md' # 🔥 Теперь путь соответствует твоему шаблону
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -50,5 +50,5 @@ jobs:
     - name: Commit and Push generated Markdown files
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
-        commit_message: "docs: генерация документации в каталог wiki [skip ci]"
+        commit_message: "docs: генерация документации в корневой каталог wiki [skip ci]"
         file_pattern: '**.md'
