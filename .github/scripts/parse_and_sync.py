@@ -8,9 +8,9 @@ from googleapiclient.http import MediaIoBaseUpload
 SERVICE_ACCOUNT_FILE = 'github_credentials.json' 
 GOOGLE_FOLDER_ID = os.environ.get('GOOGLE_FOLDER_ID') 
 
-# Базовые пути от корня репозитория
+# Базовые пути
 SQL_FOLDER_PATH = './MAIN_DB/StoredProcedure/' 
-MAIN_DB_MAP_PATH = './wiki/MAIN_DB/MAIN_DB.md' # 🔥 Карта базы данных теперь тут
+MAIN_DB_MAP_PATH = './wiki/MAIN_DB/MAIN_DB.md' 
 
 def parse_sql_header_and_relations(sql_text):
     header_match = re.search(r'-- ===+.*?-- ===+', sql_text, re.DOTALL)
@@ -67,33 +67,31 @@ def generate_proc_md(proc_name, header_info, tables):
     return "\n".join(parts)
 
 def update_main_db_map(proc_list):
-    # Если папки для карты физически нет на сервере, создаем её структуру
+    """Жесткая сборка файла карты без использования re.sub, что исключает дублирование"""
     os.makedirs(os.path.dirname(MAIN_DB_MAP_PATH), exist_ok=True)
     
-    # Если самого файла еще нет в Git, инициализируем его базовой структурой
-    if not os.path.exists(MAIN_DB_MAP_PATH):
-        with open(MAIN_DB_MAP_PATH, 'w', encoding='utf-8') as f:
-            f.write("# 🗺️ Карта Базы Данных MAIN_DB\n\n## ⚙️ Хранимые процедуры\n\n")
-        
-    with open(MAIN_DB_MAP_PATH, 'r', encoding='utf-8') as f:
-        content = f.read()
-        
-    # Формируем чистый список процедур
-    lines_to_insert = [""]
-    for proc_name, desc in sorted(proc_list):
-        lines_to_insert.append(f"* **[[{proc_name}]]** — {desc}")
-    lines_to_insert.append("")
+    # Статичный заголовок карты
+    card_parts = [
+        "---",
+        "type: database_map",
+        "---",
+        "# 🗺️ Общая карта базы данных MAIN_DB",
+        "",
+        "Здесь находится автоматический список зарегистрированных хранимых процедур.",
+        "",
+        "## ⚙️ Список хранимых процедур",
+        ""
+    ]
     
-    new_block = "\n".join(lines_to_insert)
-    
-    # Если маркеры по какой-то причине пропали из файла, добавляем их в конец
-    if "" not in content:
-        content += "\n\n## ⚙️ Хранимые процедуры\n\n"
+    # Добавляем только уникальные процедуры, сортируя по имени
+    unique_procs = sorted(list(set(proc_list)), key=lambda x: x[0])
+    for proc_name, desc in unique_procs:
+        card_parts.append(f"* **[[{proc_name}]]** — {desc}")
         
-    pattern = r'.*?'
-    updated_content = re.sub(pattern, new_block, content, flags=re.DOTALL)
+    card_parts.append("")
     
-    # Сохраняем обновленную карту локально в Git
+    updated_content = "\n".join(card_parts)
+    
     with open(MAIN_DB_MAP_PATH, 'w', encoding='utf-8') as f:
         f.write(updated_content)
         
@@ -145,27 +143,31 @@ def main():
     
     if os.path.exists(base_sql_path):
         for root, dirs, files in os.walk(base_sql_path):
+            # ЗАЩИТА: Если в пути есть слово wiki, полностью игнорируем эту ветку os.walk
+            if f"{os.sep}wiki{os.sep}" in root or root.endswith(f"{os.sep}wiki"):
+                continue
+                
             for file in files:
+                # Читаем строго .sql исходники
                 if file.endswith('.sql'):
                     proc_name = file.replace('.sql', '')
                     
                     if proc_name in proc_dict:
                         continue
                     
-                    # 1. Вычисляем полный путь от корня репозитория (например, "MAIN_DB/StoredProcedure/Finance")
+                    # Вычисляем путь относительно корня проекта
                     full_git_path = os.path.relpath(root, '.')
                     
-                    # 2. Формируем локальный путь в wiki (добавляем 'wiki' в начало: "wiki/MAIN_DB/StoredProcedure/Finance")
+                    # Путь для сохранения локального .md внутри wiki
                     local_md_dir = os.path.join('wiki', full_git_path)
                     os.makedirs(local_md_dir, exist_ok=True)
                     
-                    # 3. Для Google Drive строим структуру папок начиная с названия БД ("MAIN_DB/StoredProcedure/Finance")
+                    # Структура папок для Google Drive (чистая база данных)
                     current_drive_folder_id = GOOGLE_FOLDER_ID
                     folder_parts = full_git_path.split(os.sep)
                     for part in folder_parts:
                         current_drive_folder_id = get_or_create_drive_folder(service, part, current_drive_folder_id)
                     
-                    # Читаем SQL исходник
                     with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
                         sql_content = f.read()
                     
@@ -174,18 +176,15 @@ def main():
                     
                     md_content = generate_proc_md(proc_name, header_info, tables)
                     
-                    # Сохраняем локальный .md файл внутри каталога wiki/
+                    # Сохраняем локальный файл
                     with open(os.path.join(local_md_dir, f"{proc_name}.md"), 'w', encoding='utf-8') as md_f:
                         md_f.write(md_content)
                     
-                    # Отправляем файл в Google Drive в чистую иерархию папок базы
                     upload_to_drive(service, f"{proc_name}.md", md_content, current_drive_folder_id)
 
     proc_list = list(proc_dict.items())
     updated_map_content = update_main_db_map(proc_list)
     if updated_map_content:
-        # Для Google Drive карту MAIN_DB.md тоже нужно положить внутрь папки MAIN_DB
-        # Сначала найдем или создадим папку MAIN_DB в корне Диска
         main_db_drive_id = get_or_create_drive_folder(service, "MAIN_DB", GOOGLE_FOLDER_ID)
         upload_to_drive(service, "MAIN_DB.md", updated_map_content, main_db_drive_id)
 
