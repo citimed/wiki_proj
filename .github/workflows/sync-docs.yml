@@ -45,18 +45,18 @@ jobs:
 
     - name: Create Service Account Key File
       run: |
-        # Железная запись многострочного секрета через HEREDOC
+        # Запись многострочного секрета через HEREDOC (сохраняет структуру JSON)
         cat << 'EOF' > github_credentials.json
         ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
         EOF
         
-        # Автодекодирование, если в секретах лежит Base64 строка вместо чистого JSON
+        # Автодекодирование, если в секретах GitHub лежит Base64 вместо чистого JSON
         if ! grep -q "{" github_credentials.json; then
           echo "🔄 Обнаружена Base64-строка. Декодируем..."
           base64 --decode github_credentials.json > temp.json && mv temp.json github_credentials.json
         fi
         
-        echo "✅ Файл ключа сгенерирован. Размер: $(wc -c < github_credentials.json) байт."
+        echo "✅ Файл ключа создан. Размер: $(wc -c < github_credentials.json) байт."
 
     - name: Run Parse and Sync Script
       env:
