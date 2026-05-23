@@ -46,7 +46,15 @@ jobs:
     - name: Create Service Account Key File
       run: |
         RAW_KEY='${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}'
-        # Проверяем, является ли секрет Base64 строкой или чистым JSON
+        
+        if [ -z "$RAW_KEY" ]; then
+          echo "❌ КРИТИЧЕСКАЯ ОШИБКА: GitHub Actions передает ПУСТУЮ строку вместо секрета!"
+          echo "Проверь Settings -> Secrets -> Actions. Секрет должен быть в Repository Secrets!"
+          exit 1
+        fi
+        
+        echo "✅ Секрет найден! Длина ключа: ${#RAW_KEY} символов."
+        
         if echo "$RAW_KEY" | grep -q '^{'; then
           echo "$RAW_KEY" > github_credentials.json
           echo "📥 Ключ записан напрямую как чистый JSON"
