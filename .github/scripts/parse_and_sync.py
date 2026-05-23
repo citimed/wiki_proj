@@ -100,7 +100,6 @@ def update_db_map_md(db_path, entity_registry):
             card_parts.append("")
     content = "\n".join(card_parts)
     with open(map_path, 'w', encoding='utf-8') as f: f.write(content)
-
 def upload_or_update_google_doc(service, doc_name, html_content, target_folder_id):
     query = f"name = '{doc_name}' and '{target_folder_id}' in parents and mimeType = 'application/vnd.google-apps.document' and trashed = false"
     results = service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
@@ -143,12 +142,32 @@ def convert_markdown_to_basic_html(md_text, title):
     return f"<html><body><h1>📝 Модуль: {title}</h1>{joined_lines}</body></html>"
 
 def main():
+    # --- ДИАГНОСТИЧЕСКИЙ ЩИТ ОТ ОШИБОК АВТОРИЗАЦИИ ---
+    if not os.path.exists(SERVICE_ACCOUNT_FILE):
+        print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Файл {SERVICE_ACCOUNT_FILE} не найден!")
+        return
+        
+    file_size = os.path.getsize(SERVICE_ACCOUNT_FILE)
+    print(f"📦 Чтение файла ключа. Размер: {file_size} байт.")
+    
+    try:
+        with open(SERVICE_ACCOUNT_FILE, 'r', encoding='utf-8') as test_f:
+            content = test_f.read().strip()
+            if not content:
+                print("❌ КРИТИЧЕСКАЯ ОШИБКА: Файл ключа абсолютно ПУСТОЙ (0 байт) внутри Python!")
+                return
+            json.loads(content)
+    except json.JSONDecodeError as je:
+        print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Файл содержит невалидный JSON!")
+        print(f"Содержимое файла (первые 25 символов): {content[:25]}...")
+        print(f"Детали ошибки: {je}")
+        return
+
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=['https://www.googleapis.com/auth/drive'])
     service = build('drive', 'v3', credentials=creds)
     
     changed_files_raw = os.environ.get('CHANGED_FILES_JSON', '[]')
-    try:
-        changed_files = json.loads(changed_files_raw)
+    try: changed_files = json.loads(changed_files_raw)
     except Exception:
         print("⚠️ Ошибка парсинга JSON измененных файлов.")
         return
@@ -158,26 +177,20 @@ def main():
         return
 
     print(f"🚀 Найдено измененных файлов: {len(changed_files)}")
-    
     databases_to_rebuild = set()
     
     for file_path in changed_files:
         file_path = os.path.normpath(file_path)
-        
         if file_path.startswith('wiki' + os.sep) or file_path.startswith('.github'):
             continue
             
         parts = file_path.split(os.sep)
-        
-        # ЛОГИКА 1: Изменения внутри каталога базы данных (DB/[имя_базы]/**)
         if len(parts) >= 3 and parts[0] == 'DB':
             db_folder_name = parts[1]
-            db_relative_path = os.path.join('DB', db_folder_name)
-            databases_to_rebuild.add(db_relative_path)
+            databases_to_rebuild.add(os.path.join('DB', db_folder_name))
             print(f"🎯 Изменение в БД обнаружено: {file_path}. Запланирован монолит для {db_folder_name}.")
             continue
 
-        # ЛОГИКА 2: Изменение описания корневого модуля ([folder_name].md)
         if file_path.endswith('.md') and os.path.exists(file_path):
             parent_dir = os.path.dirname(file_path)
             folder_name = os.path.basename(parent_dir) if parent_dir else ""
@@ -185,14 +198,12 @@ def main():
             
             if folder_name and file_name_without_ext == folder_name:
                 print(f"📄 Корневой модуль найден: {file_path}. Запуск пофайловой синхронизации.")
-                
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     md_content = f.read()
                     
                 wiki_target_path = os.path.join('wiki', file_path)
                 os.makedirs(os.path.dirname(wiki_target_path), exist_ok=True)
-                with open(wiki_target_path, 'w', encoding='utf-8') as f:
-                    f.write(md_content)
+                with open(wiki_target_path, 'w', encoding='utf-8') as f: f.write(md_content)
                 
                 current_drive_folder_id = GOOGLE_FOLDER_ID
                 if parent_dir:
@@ -202,7 +213,6 @@ def main():
                 html_doc_content = convert_markdown_to_basic_html(md_content, file_name_without_ext)
                 upload_or_update_google_doc(service, file_name_without_ext, html_doc_content, current_drive_folder_id)
 
-    # ВЫПОЛНЕНИЕ СБОРКИ МОНОЛИТОВ ДЛЯ БАЗ ДАННЫХ
     for db_path in databases_to_rebuild:
         db_name = os.path.basename(db_path)
         print(f"⚙️ Сборка монолитного документа для базы: {db_name} из папки {db_path}")
@@ -218,7 +228,6 @@ def main():
                     if entity_name in db_registry: continue
                     
                     entity_type, icon = get_entity_type_info(root)
-                    
                     file_full_path = os.path.join(root, file)
                     sql_content = None
                     for encoding_variant in ['utf-8', 'utf-16', 'windows-1251']:
@@ -245,7 +254,6 @@ def main():
                     
         if db_registry:
             update_db_map_md(db_path, db_registry)
-            
             type_titles_ru = {
                 'table': '📊 Таблицы данных', 'stored_procedure': '⚙️ Хранимые процедуры',
                 'trigger': '🪤 Триггеры', 'view': '👁️ Представления (Views)', 'sql_script': '📝 Прочие скрипты'
@@ -264,7 +272,6 @@ def main():
                     html_parts.append("</ul>")
             
             html_parts.append("<hr style='border: 2px solid #333; margin: 40px 0;'>")
-            
             for ent_type, title in type_titles_ru.items():
                 items = db_monolith_data[ent_type]
                 if items:
@@ -288,4 +295,4 @@ def main():
             upload_or_update_google_doc(service, db_name, "\n".join(html_parts), db_drive_folder_id)
 
 if __name__ == '__main__':
-    main()
+    main()        
