@@ -1,21 +1,25 @@
-name: Sync Documentation to Wiki and Google Drive
+name: Sync DB and Modules Documentation to Google Drive
 
 on:
   push:
     branches:
       - main
-    paths-ignore:
-      - 'wiki/**' # Игнорируем изменения в самой вики, чтобы избежать циклов
+    paths:
+      - 'DB/**'
+      - '*.md'
+      - '**/*.md'
+      - '!.github/**'
+      - '!wiki/**'
 
 jobs:
-  sync:
+  sync-docs:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # Важно для корректного определения измененных файлов
+        fetch-depth: 0
 
     - name: Get changed files
       id: changed-files
@@ -28,29 +32,43 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
 
-    - name: Decode Google Credentials
+    - name: Create Service Account Key File
       run: |
-        echo "${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}" | base64 -d > github_credentials.json
+        RAW_KEY='${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}'
+        # Проверяем, является ли секрет Base64 строкой или чистым JSON
+        if echo "$RAW_KEY" | grep -q '^{'; then
+          echo "$RAW_KEY" > github_credentials.json
+          echo "📥 Ключ записан напрямую как чистый JSON"
+        else
+          echo "$RAW_KEY" | base64 --decode > github_credentials.json
+          echo "🔓 Ключ успешно декодирован из Base64"
+        fi
 
     - name: Run Parse and Sync Script
       env:
         GOOGLE_FOLDER_ID: ${{ secrets.GOOGLE_FOLDER_ID }}
-        # Передаем список измененных файлов в формате JSON в переменные окружения
         CHANGED_FILES_JSON: ${{ steps.changed-files.outputs.all_changed_files }}
       run: |
         python .github/scripts/parse_and_sync.py
 
-    - name: Commit and Push Changes to Wiki
+    - name: Commit and Push changes to Wiki
       run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add wiki/
-        # Проверяем, есть ли что коммитить, чтобы экшен не падал при пустом diff
-        git diff-index --quiet HEAD || git commit -m "chore: auto-sync wiki documentation [skip ci]"
-        git push
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        
+        # Проверяем, появились ли новые .md файлы в папке wiki
+        if [ -d "wiki" ] && [ -n "$(git status --porcelain wiki)" ]; then
+          git add wiki/
+          git commit -m "docs: автогенерация локальной wiki структуры [skip ci]"
+          git push
+          echo "✅ Локальная структура Wiki обновлена в репозитории"
+        else
+          echo "💡 Нет изменений для фиксации в локальной wiki"
+        fi
