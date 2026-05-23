@@ -10,6 +10,10 @@ on:
       - '**/*.md'
       - '!.github/**'
       - '!wiki/**'
+# НАЧАЛО БЛОКА ИСПРАВЛЕНИЯ: Выдаем права на чтение и запись для GITHUB_TOKEN
+permissions:
+  contents: write
+# КОНЕЦ БЛОКА ИСПРАВЛЕНИЯ
 
 jobs:
   sync-docs:
