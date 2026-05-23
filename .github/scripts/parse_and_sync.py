@@ -101,41 +101,4 @@ def update_db_map_md(db_path, entity_registry):
     content = "\n".join(card_parts)
     with open(map_path, 'w', encoding='utf-8') as f: f.write(content)
 
-def upload_or_update_google_doc(service, doc_name, html_content, target_folder_id):
-    query = f"name = '{doc_name}' and '{target_folder_id}' in parents and mimeType = 'application/vnd.google-apps.document' and trashed = false"
-    results = service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
-    items = results.get('files', [])
-
-    file_stream = io.BytesIO(html_content.encode('utf-8'))
-    media = MediaIoBaseUpload(file_stream, mimetype='text/html', resumable=False)
-
-    if items:
-        file_id = items[0]['id']
-        service.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
-        print(f"🔄 Документ обновлен на Диске: {doc_name}")
-    else:
-        file_metadata = {
-            'name': doc_name, 'mimeType': 'application/vnd.google-apps.document', 'parents': [target_folder_id]
-        }
-        service.files().create(body=file_metadata, media_body=media, fields="id", supportsAllDrives=True).execute()
-        print(f"📥 Создан новый документ на Диске: {doc_name}")
-
-def get_or_create_drive_folder(service, folder_name, parent_id):
-    query = f"name = '{folder_name}' and '{parent_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-    results = service.files().list(q=query, fields="files(id)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
-    items = results.get('files', [])
-    if items: return items[0]['id']
-        
-    folder_metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [parent_id]}
-    folder = service.files().create(body=folder_metadata, fields='id', supportsAllDrives=True).execute()
-    return folder['id']
-
-def convert_markdown_to_basic_html(md_text, title):
-    html_lines = []
-    for line in md_text.split('\n'):
-        if line.startswith('# '): html_lines.append(f"<h1>{line[2:]}</h1>")
-        elif line.startswith('## '): html_lines.append(f"<h2>{line[3:]}</h2>")
-        elif line.startswith('### '): html_lines.append(f"<h3>{line[4:]}</h3>")
-        elif line.startswith('* '): html_lines.append(f"<li>{line[2:]}</li>")
-        elif line.strip() == "": html_lines.append("<br/>")
-        else: html_lines.
+def upload_or_update_google_doc(service, doc_
