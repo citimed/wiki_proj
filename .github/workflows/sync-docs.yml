@@ -45,12 +45,12 @@ jobs:
 
     - name: Create Service Account Key File
       run: |
-        # Запись секрета через механизм воркфлоу, исключающий искажение спецсимволов
+        # Железная запись многострочного секрета через HEREDOC
         cat << 'EOF' > github_credentials.json
         ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
         EOF
         
-        # Проверяем на валидность base64 / json
+        # Автодекодирование, если в секретах лежит Base64 строка вместо чистого JSON
         if ! grep -q "{" github_credentials.json; then
           echo "🔄 Обнаружена Base64-строка. Декодируем..."
           base64 --decode github_credentials.json > temp.json && mv temp.json github_credentials.json
