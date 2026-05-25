@@ -47,7 +47,7 @@ jobs:
       run: |
         # Запись многострочного секрета через HEREDOC
         cat << 'EOF' > github_credentials.json
-        ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+        ${{ secrets.GOOGLE_CREDENTIALS }}
         EOF
         
         # Автодекодирование, если в секретах GitHub лежит Base64 вместо чистого JSON
