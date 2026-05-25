@@ -40,8 +40,8 @@ def generate_entity_md(name, header_info, tables, entity_type):
     icons = {'stored_procedure': '⚙️', 'table': '📊', 'trigger': '🪤', 'view': '👁️', 'sql_script': '📝'}
     return f"---\ntype: {entity_type}\ndb_version: MS SQL Server 2019\ndialect: T-SQL\n---\n\n# {icons.get(entity_type, '📦')} dbo.{name} ({type_labels.get(entity_type, 'Объект БД')})\n\n## 📄 Метаданные\n```text\n{header_info}\n```\n\n## 🔗 Связи\n{relations_md}"
 
-def update_db_map_md(db_folder, entity_registry, wiki_base):
-    map_path = os.path.join(wiki_base, 'DB', db_folder, f"{db_folder}.md")
+def update_db_map_md(db_folder, entity_registry, WIKI_BASE):
+    map_path = os.path.join(WIKI_BASE, 'DB', db_folder, f"{db_folder}.md")
     os.makedirs(os.path.dirname(map_path), exist_ok=True)
     card_parts = ["---", "type: database_map", "---", f"# 🗺️ Архитектурная карта БД {db_folder}", "", "Структура объектов:", ""]
     categories = {'table': ('📊 Таблицы', []), 'stored_procedure': ('⚙️ Процедуры', []), 'trigger': ('🪤 Триггеры', []), 'view': ('👁️ Представления', []), 'sql_script': ('📝 Скрипты', [])}
@@ -146,7 +146,7 @@ def main():
                         db_monolith_data[e_type].append({'name': e_name, 'header_info': h_info, 'tables': tables, 'desc': desc})
             
             if db_registry:
-                update_db_map_md(db_folder, db_registry, wiki_base)
+                update_db_map_md(db_folder, db_registry, WIKI_BASE)
                 titles = {'table': '📊 Таблицы данных', 'stored_procedure': '⚙️ Хранимые процедуры', 'trigger': '🪤 Триггеры', 'view': '👁️ Представления', 'sql_script': '📝 Скрипты'}
                 html = [f"<html><body><h1>🗺️ Архитектура БД {db_folder}</h1>"]
                 for t, tl in titles.items():
