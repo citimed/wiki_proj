@@ -103,16 +103,12 @@ def main():
     for file_path in changed_files:
         file_path = os.path.normpath(file_path)
         
-        # Пропускаем служебные файлы гитхаба и саму локальную вики
         if file_path.startswith('wiki') or file_path.startswith('.github') or not file_path.endswith('.md'): 
             continue
             
         if os.path.exists(os.path.join(BASE_DIR, file_path)):
             parent_dir = os.path.dirname(file_path)
             
-            # Условие сработает:
-            # 1. Если имя файла совпадает с именем папки (для обычных модулей)
-            # 2. ИЛИ если это файл DB.md в корне каталога DB
             is_valid_module = parent_dir and os.path.basename(file_path).replace('.md', '') == os.path.basename(parent_dir)
             is_root_db_md = (file_path == f"DB{os.sep}DB.md" or file_path == "DB/DB.md")
             
@@ -126,7 +122,6 @@ def main():
                 with open(w_path, 'w', encoding='utf-8') as f: 
                     f.write(md_content)
                     
-                # Определяем и достраиваем структуру папок в Google Drive
                 f_id = GOOGLE_FOLDER_ID
                 if parent_dir:
                     for part in parent_dir.split(os.sep): 
@@ -140,11 +135,15 @@ def main():
                 )
 
     # =========================================================================
-    # 2. ПОЛНОЕ СКАНИРОВАНИЕ КАТАЛОГА DB И ГЕНЕРАЦИЯ СТРУКТУРЫ СВЯЗЕЙ
+    # 2. ПОЛНОЕ СКАНИРОВАНИЕ КАТАЛОГА DB И ГЕНЕРАЦИЯ СТРУКТУРЫ
     # =========================================================================
     db_root_path = os.path.join(BASE_DIR, 'DB')
     if os.path.exists(db_root_path):
         print("🔍 Запуск тотального сканирования каталога DB...")
+        
+        # Шаг А: Находим или создаем корневую папку "DB" на Google Диске (для файла описания)
+        drive_db_root_id = get_or_create_drive_folder(service, 'DB', GOOGLE_FOLDER_ID)
+        
         for db_folder in os.listdir(db_root_path):
             db_path = os.path.join(db_root_path, db_folder)
             if not os.path.isdir(db_path): 
@@ -176,7 +175,7 @@ def main():
                         h_info, tables, desc = parse_sql_header_and_relations(sql_content)
                         db_registry[e_name] = {'type': e_type, 'desc': desc}
                         
-                        # Сохраняем структуру папки DB внутри каталога wiki (с префиксом WIKI_BASE)
+                        # [ДЛЯ ВИКИ] Сохраняем раздельные .md файлы локально
                         rel_root = os.path.relpath(root, BASE_DIR)
                         l_dir = os.path.normpath(os.path.join(WIKI_BASE, rel_root))
                         os.makedirs(l_dir, exist_ok=True)
@@ -185,40 +184,57 @@ def main():
                         
                         db_monolith_data[e_type].append({'name': e_name, 'header_info': h_info, 'tables': tables, 'desc': desc})
             
-            # Если в базе нашли SQL-объекты, обновляем карту и Google Диск
             if db_registry:
-                # Передаем WIKI_BASE капсом, как и положено
+                # [ДЛЯ ВИКИ] Обновляем карту объектов в локальном репозитории
                 update_db_map_md(db_folder, db_registry, WIKI_BASE)
                 
                 titles = {'table': '📊 Таблицы данных', 'stored_procedure': '⚙️ Хранимые процедуры', 'trigger': '🪤 Триггеры', 'view': '👁️ Представления', 'sql_script': '📝 Скрипты'}
-                html = [f"<html><body><h1>🗺️ Архитектура БД {db_folder}</h1>"]
                 
+                # [ДЛЯ ДИСКА] Собираем HTML-монолит с навигацией
+                html = [f"<html><body><h1>🗺️ Архитектурная карта и монолит БД: {db_folder}</h1>"]
+                
+                html.append("<h2>📍 Быстрая навигация по объектам</h2>")
                 for t, tl in titles.items():
                     if db_monolith_data[t]:
                         html.append(f"<h3>{tl}</h3><ul>")
                         for x in sorted(db_monolith_data[t], key=lambda i: i['name']): 
-                            html.append(f"<li><b><a href='#e_{x['name']}'>{x['name']}</a></b> — {x['desc']}</li>")
+                            html.append(f"<li><b><a href='#e_{x['name']}'>{x['name']}</a></b> — <span style='color:#555;'>{x['desc']}</span></li>")
                         html.append("</ul>")
-                html.append("<hr/>")
+                html.append("<br/><hr style='border:1px solid #ddd;'/><br/>")
                 
                 for t, tl in titles.items():
                     if db_monolith_data[t]:
-                        html.append(f"<h1>{tl}</h1>")
+                        html.append(f"<h1 style='color:#1a73e8; border-bottom:2px solid #1a73e8; padding-bottom:5px;'>{tl}</h1>")
                         for x in sorted(db_monolith_data[t], key=lambda i: i['name']):
-                            html.append(f"<div id='e_{x['name']}' style='margin-bottom:30px;'><h2>dbo.{x['name']}</h2><pre style='background:#f4f4f4;padding:10px;'>{x['header_info']}</pre>")
+                            html.append(f"<div id='e_{x['name']}' style='margin-bottom:40px; padding:15px; border-left:4px solid #1a73e8; background:#fafafa;'>")
+                            html.append(f"<h2>dbo.{x['name']}</h2>")
+                            html.append(f"<p><b>Описание бизнес-логики:</b> {x['desc']}</p>")
+                            html.append(f"<h3>📄 Метаданные из заголовка:</h3>")
+                            html.append(f"<pre style='background:#f4f4f4; padding:12px; border:1px solid #ddd; font-family:Courier,monospace;'>{x['header_info'].strip()}</pre>")
+                            
+                            html.append(f"<h3>🔗 Архитектурные связи:</h3>")
                             if x['tables']: 
-                                html.append("<ul>" + "".join([f"<li>Связан с: <a href='#e_{s}'>{s}</a></li>" for s in x['tables']]) + "</ul>")
+                                html.append("<ul style='margin-top:5px;'>")
+                                for s in x['tables']:
+                                    html.append(f"<li>Использует объект: <a href='#e_{s}'><b>{s}</b></a></li>")
+                                html.append("</ul>")
                             else: 
-                                html.append("<p><i>Связи не найдены</i></p>")
+                                html.append("<p style='color:#777; font-style:italic;'>Объект изолирован (прямых связей не обнаружено)</p>")
                             html.append("</div>")
+                            
                 html.append("</body></html>")
                 
+                # Шаг Б: Создаем или находим подпапку для этой конкретной базы (например, "DB/MAIN_DB")
+                target_subfolder_id = get_or_create_drive_folder(service, db_folder, drive_db_root_id)
+                
+                # Шаг В: Загружаем монолитный документ именно в эту подпапку без расширения в имени
                 upload_or_update_google_doc(
                     service, 
                     db_folder, 
                     "\n".join(html), 
-                    get_or_create_drive_folder(service, 'DB', GOOGLE_FOLDER_ID)
+                    target_subfolder_id
                 )
+                print(f"📥 Монолит базы {db_folder} успешно сохранен по пути: DB/{db_folder}/{db_folder}")
 
 if __name__ == '__main__':
     main()
