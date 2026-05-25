@@ -84,59 +84,99 @@ def convert_markdown_to_basic_html(md_text, title):
     return f"<html><body><h1>📝 Модуль: {title}</h1>{''.join(html)}</body></html>"
 
 def main():
-    if not os.path.exists(SERVICE_ACCOUNT_FILE): return
+    if not os.path.exists(SERVICE_ACCOUNT_FILE): 
+        print(f"❌ Файл ключей {SERVICE_ACCOUNT_FILE} не найден.")
+        return
+        
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=['https://www.googleapis.com/auth/drive'])
     service = build('drive', 'v3', credentials=creds)
     
     BASE_DIR = os.getcwd()
     WIKI_BASE = os.path.join(BASE_DIR, 'wiki')
     
-    # 1. Синхронизация корневых md-модулей документации
+    # =========================================================================
+    # 1. СИНХРОНИЗАЦИЯ КОРНЕВЫХ MD-МОДУЛЕЙ (ВКЛЮЧАЯ ОПИСАНИЕ КАТАЛОГА DB)
+    # =========================================================================
     changed_files = json.loads(os.environ.get('CHANGED_FILES_JSON', '[]'))
+    print("📋 Анализируем измененные файлы...")
+    
     for file_path in changed_files:
         file_path = os.path.normpath(file_path)
-        if file_path.startswith('wiki') or file_path.startswith('.github') or not file_path.endswith('.md'): continue
+        
+        # Пропускаем служебные файлы гитхаба и саму локальную вики
+        if file_path.startswith('wiki') or file_path.startswith('.github') or not file_path.endswith('.md'): 
+            continue
+            
         if os.path.exists(os.path.join(BASE_DIR, file_path)):
             parent_dir = os.path.dirname(file_path)
-            if parent_dir and os.path.basename(file_path).replace('.md', '') == os.path.basename(parent_dir):
-                with open(os.path.join(BASE_DIR, file_path), 'r', encoding='utf-8', errors='ignore') as f: md_content = f.read()
+            
+            # Условие сработает:
+            # 1. Если имя файла совпадает с именем папки (для обычных модулей)
+            # 2. ИЛИ если это файл DB.md в корне каталога DB
+            is_valid_module = parent_dir and os.path.basename(file_path).replace('.md', '') == os.path.basename(parent_dir)
+            is_root_db_md = (file_path == f"DB{os.sep}DB.md" or file_path == "DB/DB.md")
+            
+            if is_valid_module or is_root_db_md:
+                print(f"📝 Обработка md-модуля: {file_path}")
+                with open(os.path.join(BASE_DIR, file_path), 'r', encoding='utf-8', errors='ignore') as f: 
+                    md_content = f.read()
+                    
                 w_path = os.path.join(WIKI_BASE, file_path)
                 os.makedirs(os.path.dirname(w_path), exist_ok=True)
-                with open(w_path, 'w', encoding='utf-8') as f: f.write(md_content)
+                with open(w_path, 'w', encoding='utf-8') as f: 
+                    f.write(md_content)
+                    
+                # Определяем и достраиваем структуру папок в Google Drive
                 f_id = GOOGLE_FOLDER_ID
-                for part in parent_dir.split(os.sep): f_id = get_or_create_drive_folder(service, part, f_id)
-                upload_or_update_google_doc(service, os.path.basename(file_path).replace('.md', ''), convert_markdown_to_basic_html(md_content, os.path.basename(file_path).replace('.md', '')), f_id)
+                if parent_dir:
+                    for part in parent_dir.split(os.sep): 
+                        f_id = get_or_create_drive_folder(service, part, f_id)
+                        
+                upload_or_update_google_doc(
+                    service, 
+                    os.path.basename(file_path).replace('.md', ''), 
+                    convert_markdown_to_basic_html(md_content, os.path.basename(file_path).replace('.md', '')), 
+                    f_id
+                )
 
-    # 2. Сканирование каталога DB и генерация структуры wiki/DB/...
+    # =========================================================================
+    # 2. ПОЛНОЕ СКАНИРОВАНИЕ КАТАЛОГА DB И ГЕНЕРАЦИЯ СТРУКТУРЫ СВЯЗЕЙ
+    # =========================================================================
     db_root_path = os.path.join(BASE_DIR, 'DB')
     if os.path.exists(db_root_path):
-        print("🔍 Запуск сканирования каталога DB...")
+        print("🔍 Запуск тотального сканирования каталога DB...")
         for db_folder in os.listdir(db_root_path):
             db_path = os.path.join(db_root_path, db_folder)
-            if not os.path.isdir(db_path): continue
+            if not os.path.isdir(db_path): 
+                continue
             
-            print(f"⚙️ Сборка документации для базы: {db_folder}")
-            db_registry, db_monolith_data = {}, {'table': [], 'stored_procedure': [], 'trigger': [], 'view': [], 'sql_script': []}
+            print(f"⚙️ Сборка документации для базы данных: {db_folder}")
+            db_registry = {}
+            db_monolith_data = {'table': [], 'stored_procedure': [], 'trigger': [], 'view': [], 'sql_script': []}
             
             for root, _, files in os.walk(db_path):
                 for file in files:
                     if file.endswith('.sql'):
                         e_name = file.replace('.sql', '')
-                        if e_name in db_registry: continue
+                        if e_name in db_registry: 
+                            continue
                         e_type, _ = get_entity_type_info(root)
                         
                         sql_content = None
                         for enc in ['utf-8', 'utf-16', 'windows-1251']:
                             try:
-                                with open(os.path.join(root, file), 'r', encoding=enc) as f: sql_content = f.read()
+                                with open(os.path.join(root, file), 'r', encoding=enc) as f: 
+                                    sql_content = f.read()
                                 break
-                            except Exception: pass
-                        if sql_content is None: continue
+                            except Exception: 
+                                pass
+                        if sql_content is None: 
+                            continue
                         
                         h_info, tables, desc = parse_sql_header_and_relations(sql_content)
                         db_registry[e_name] = {'type': e_type, 'desc': desc}
                         
-                        # Сохраняем структуру папки DB внутри каталога wiki
+                        # Сохраняем структуру папки DB внутри каталога wiki (с префиксом WIKI_BASE)
                         rel_root = os.path.relpath(root, BASE_DIR)
                         l_dir = os.path.normpath(os.path.join(WIKI_BASE, rel_root))
                         os.makedirs(l_dir, exist_ok=True)
@@ -145,26 +185,40 @@ def main():
                         
                         db_monolith_data[e_type].append({'name': e_name, 'header_info': h_info, 'tables': tables, 'desc': desc})
             
+            # Если в базе нашли SQL-объекты, обновляем карту и Google Диск
             if db_registry:
+                # Передаем WIKI_BASE капсом, как и положено
                 update_db_map_md(db_folder, db_registry, WIKI_BASE)
+                
                 titles = {'table': '📊 Таблицы данных', 'stored_procedure': '⚙️ Хранимые процедуры', 'trigger': '🪤 Триггеры', 'view': '👁️ Представления', 'sql_script': '📝 Скрипты'}
                 html = [f"<html><body><h1>🗺️ Архитектура БД {db_folder}</h1>"]
+                
                 for t, tl in titles.items():
                     if db_monolith_data[t]:
                         html.append(f"<h3>{tl}</h3><ul>")
-                        for x in sorted(db_monolith_data[t], key=lambda i: i['name']): html.append(f"<li><b><a href='#e_{x['name']}'>{x['name']}</a></b> — {x['desc']}</li>")
+                        for x in sorted(db_monolith_data[t], key=lambda i: i['name']): 
+                            html.append(f"<li><b><a href='#e_{x['name']}'>{x['name']}</a></b> — {x['desc']}</li>")
                         html.append("</ul>")
                 html.append("<hr/>")
+                
                 for t, tl in titles.items():
                     if db_monolith_data[t]:
                         html.append(f"<h1>{tl}</h1>")
                         for x in sorted(db_monolith_data[t], key=lambda i: i['name']):
                             html.append(f"<div id='e_{x['name']}' style='margin-bottom:30px;'><h2>dbo.{x['name']}</h2><pre style='background:#f4f4f4;padding:10px;'>{x['header_info']}</pre>")
-                            if x['tables']: html.append("<ul>" + "".join([f"<li>Связан с: <a href='#e_{s}'>{s}</a></li>" for s in x['tables']]) + "</ul>")
-                            else: html.append("<p><i>Связи не найдены</i></p>")
+                            if x['tables']: 
+                                html.append("<ul>" + "".join([f"<li>Связан с: <a href='#e_{s}'>{s}</a></li>" for s in x['tables']]) + "</ul>")
+                            else: 
+                                html.append("<p><i>Связи не найдены</i></p>")
                             html.append("</div>")
                 html.append("</body></html>")
-                upload_or_update_google_doc(service, db_folder, "\n".join(html), get_or_create_drive_folder(service, 'DB', GOOGLE_FOLDER_ID))
+                
+                upload_or_update_google_doc(
+                    service, 
+                    db_folder, 
+                    "\n".join(html), 
+                    get_or_create_drive_folder(service, 'DB', GOOGLE_FOLDER_ID)
+                )
 
 if __name__ == '__main__':
     main()
