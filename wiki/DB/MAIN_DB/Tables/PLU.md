@@ -8,8 +8,8 @@ dialect: T-SQL
 
 ## 📄 Метаданные
 ```text
-NAME: PLU
-Descriprion: Справочник SKU
+Name: PLU
+Description: Справочник SKU
 RELEASE:
 Author:
 Changelog:
