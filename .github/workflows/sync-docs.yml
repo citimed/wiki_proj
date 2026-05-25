@@ -45,7 +45,7 @@ jobs:
 
     - name: Create Service Account Key File
       run: |
-        # Запись многострочного секрета через HEREDOC (сохраняет структуру JSON)
+        # Запись многострочного секрета через HEREDOC
         cat << 'EOF' > github_credentials.json
         ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
         EOF
