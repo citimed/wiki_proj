@@ -364,7 +364,7 @@ begin
 	--*****************************************************
 
 	UPDATE #link_temp SET
-	  result   = @result  ,
+	result   = @result  ,
 	  id_prime = @id_prime,
 	  id_child = @id_child,
 	  message  = @message,
