@@ -88,16 +88,20 @@ def main():
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=['https://www.googleapis.com/auth/drive'])
     service = build('drive', 'v3', credentials=creds)
     
+    # Базовый путь к корню репозитория
+    BASE_DIR = os.getcwd()
+    WIKI_BASE = os.path.join(BASE_DIR, 'wiki')
+    
     # 1. СИНХРОНИЗАЦИЯ КОРНЕВЫХ КАРТИН СИСТЕМЫ (*.md модули)
     changed_files = json.loads(os.environ.get('CHANGED_FILES_JSON', '[]'))
     for file_path in changed_files:
         file_path = os.path.normpath(file_path)
         if file_path.startswith('wiki') or file_path.startswith('.github') or not file_path.endswith('.md'): continue
-        if os.path.exists(file_path):
+        if os.path.exists(os.path.join(BASE_DIR, file_path)):
             parent_dir = os.path.dirname(file_path)
             if parent_dir and os.path.basename(file_path).replace('.md', '') == os.path.basename(parent_dir):
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f: md_content = f.read()
-                w_path = os.path.join('wiki', file_path)
+                with open(os.path.join(BASE_DIR, file_path), 'r', encoding='utf-8', errors='ignore') as f: md_content = f.read()
+                w_path = os.path.join(WIKI_BASE, file_path)
                 os.makedirs(os.path.dirname(w_path), exist_ok=True)
                 with open(w_path, 'w', encoding='utf-8') as f: f.write(md_content)
                 f_id = GOOGLE_FOLDER_ID
@@ -105,10 +109,11 @@ def main():
                 upload_or_update_google_doc(service, os.path.basename(file_path).replace('.md', ''), convert_markdown_to_basic_html(md_content, os.path.basename(file_path).replace('.md', '')), f_id)
 
     # 2. ПОЛНОЕ СКАНИРОВАНИЕ ВСЕХ БАЗ ДАННЫХ В ПАПКЕ DB (Тотальная генерация локальной wiki)
-    if os.path.exists('DB'):
+    db_root_path = os.path.join(BASE_DIR, 'DB')
+    if os.path.exists(db_root_path):
         print("🔍 Запуск тотального сканирования каталога DB...")
-        for db_folder in os.listdir('DB'):
-            db_path = os.path.join('DB', db_folder)
+        for db_folder in os.listdir(db_root_path):
+            db_path = os.path.join(db_root_path, db_folder)
             if not os.path.isdir(db_path): continue
             
             print(f"⚙️ Сборка документации для базы: {db_folder}")
@@ -132,8 +137,9 @@ def main():
                         h_info, tables, desc = parse_sql_header_and_relations(sql_content)
                         db_registry[e_name] = {'type': e_type, 'desc': desc}
                         
-                        # Генерируем локальный .md файл в папку wiki
-                        l_dir = os.path.normpath(os.path.join('wiki', os.path.relpath(root, '.')))
+                        # Генерируем локальный .md файл строго в рабочую директорию wiki проекта
+                        rel_root = os.path.relpath(root, BASE_DIR)
+                        l_dir = os.path.normpath(os.path.join(WIKI_BASE, rel_root))
                         os.makedirs(l_dir, exist_ok=True)
                         with open(os.path.join(l_dir, f"{e_name}.md"), 'w', encoding='utf-8') as mf: 
                             mf.write(generate_entity_md(e_name, h_info, tables, e_type))
@@ -141,7 +147,20 @@ def main():
                         db_monolith_data[e_type].append({'name': e_name, 'header_info': h_info, 'tables': tables, 'desc': desc})
             
             if db_registry:
-                update_db_map_md(db_path, db_registry)
+                # Исправляем путь для карты базы данных
+                map_path = os.path.join(WIKI_BASE, 'DB', db_folder, f"{db_folder}.md")
+                os.makedirs(os.path.dirname(map_path), exist_ok=True)
+                card_parts = ["---", "type: database_map", "---", f"# 🗺️ Архитектурная карта БД {db_folder}", "", "Структура объектов:", ""]
+                categories = {'table': ('📊 Таблицы', []), 'stored_procedure': ('⚙️ Процедуры', []), 'trigger': ('🪤 Триггеры', []), 'view': ('👁️ Представления', []), 'sql_script': ('📝 Скрипты', [])}
+                for name, info in db_registry.items():
+                    if info['type'] in categories: categories[info['type']][1].append((name, info['desc']))
+                for ent_type, (title, items) in categories.items():
+                    if items:
+                        card_parts.append(f"## {title}")
+                        for name, desc in sorted(items, key=lambda x: x[0]): card_parts.append(f"* **[[{name}]]** — {desc}")
+                        card_parts.append("")
+                with open(map_path, 'w', encoding='utf-8') as f: f.write("\n".join(card_parts))
+
                 titles = {'table': '📊 Таблицы данных', 'stored_procedure': '⚙️ Хранимые процедуры', 'trigger': '🪤 Триггеры', 'view': '👁️ Представления', 'sql_script': '📝 Скрипты'}
                 html = [f"<html><body><h1>🗺️ Архитектура БД {db_folder}</h1>"]
                 for t, tl in titles.items():
