@@ -179,6 +179,5 @@ def main():
                             html.append("</div>")
                 html.append("</body></html>")
                 upload_or_update_google_doc(service, db_folder, "\n".join(html), get_or_create_drive_folder(service, 'DB', GOOGLE_FOLDER_ID))
-
 if __name__ == '__main__':
     main()
