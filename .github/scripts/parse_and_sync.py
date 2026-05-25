@@ -1,7 +1,9 @@
-import os, re, io, json
+import os
+import sys
+import json
+import shutil  # <-- Обязательно проверяем/добавляем этот импорт!
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 
 SERVICE_ACCOUNT_FILE = 'github_credentials.json' 
 GOOGLE_FOLDER_ID = os.environ.get('GOOGLE_FOLDER_ID') 
@@ -93,6 +95,17 @@ def main():
     
     BASE_DIR = os.getcwd()
     WIKI_BASE = os.path.join(BASE_DIR, 'wiki')
+    
+    # =========================================================================
+    # 🔥 ТОТАЛЬНАЯ ОЧИСТКА МУСОРА ПЕРЕД ЗАПУСКОМ
+    # =========================================================================
+    if os.path.exists(WIKI_BASE):
+        print("🧹 Обнаружен старый кэш локальной вики. Полная очистка мусора...")
+        shutil.rmtree(WIKI_BASE)
+    
+    # Пересоздаем пустую и стерильную папку wiki
+    os.makedirs(WIKI_BASE, exist_ok=True)
+    print("✨ Создана чистая папка wiki. Начинаем сборку...")
     
     # =========================================================================
     # 1. СИНХРОНИЗАЦИЯ КОРНЕВЫХ MD-МОДУЛЕЙ (ВКЛЮЧАЯ ОПИСАНИЕ КАТАЛОГА DB И КОРНЕВОЙ ФАЙЛ ПРОЕКТА)
