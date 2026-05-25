@@ -40,10 +40,10 @@ def generate_entity_md(name, header_info, tables, entity_type):
     icons = {'stored_procedure': '⚙️', 'table': '📊', 'trigger': '🪤', 'view': '👁️', 'sql_script': '📝'}
     return f"---\ntype: {entity_type}\ndb_version: MS SQL Server 2019\ndialect: T-SQL\n---\n\n# {icons.get(entity_type, '📦')} dbo.{name} ({type_labels.get(entity_type, 'Объект БД')})\n\n## 📄 Метаданные\n```text\n{header_info}\n```\n\n## 🔗 Связи\n{relations_md}"
 
-def update_db_map_md(db_path, entity_registry):
-    map_path = f'./wiki/{db_path}/{os.path.basename(db_path)}.md'
+def update_db_map_md(db_folder, entity_registry, wiki_base):
+    map_path = os.path.join(wiki_base, 'DB', db_folder, f"{db_folder}.md")
     os.makedirs(os.path.dirname(map_path), exist_ok=True)
-    card_parts = ["---", "type: database_map", "---", f"# 🗺️ Архитектурная карта БД {os.path.basename(db_path)}", "", "Структура объектов:", ""]
+    card_parts = ["---", "type: database_map", "---", f"# 🗺️ Архитектурная карта БД {db_folder}", "", "Структура объектов:", ""]
     categories = {'table': ('📊 Таблицы', []), 'stored_procedure': ('⚙️ Процедуры', []), 'trigger': ('🪤 Триггеры', []), 'view': ('👁️ Представления', []), 'sql_script': ('📝 Скрипты', [])}
     for name, info in entity_registry.items():
         if info['type'] in categories: categories[info['type']][1].append((name, info['desc']))
@@ -91,7 +91,7 @@ def main():
     BASE_DIR = os.getcwd()
     WIKI_BASE = os.path.join(BASE_DIR, 'wiki')
     
-    # 1. СИНХРОНИЗАЦИЯ КОРНЕВЫХ КАРТИН СИСТЕМЫ (*.md модули)
+    # 1. Синхронизация корневых md-модулей документации
     changed_files = json.loads(os.environ.get('CHANGED_FILES_JSON', '[]'))
     for file_path in changed_files:
         file_path = os.path.normpath(file_path)
@@ -107,10 +107,10 @@ def main():
                 for part in parent_dir.split(os.sep): f_id = get_or_create_drive_folder(service, part, f_id)
                 upload_or_update_google_doc(service, os.path.basename(file_path).replace('.md', ''), convert_markdown_to_basic_html(md_content, os.path.basename(file_path).replace('.md', '')), f_id)
 
-    # 2. ПОЛНОЕ СКАНИРОВАНИЕ ВСЕХ БАЗ ДАННЫХ В ПАПКЕ DB (С сохранением структуры wiki/DB/...)
+    # 2. Сканирование каталога DB и генерация структуры wiki/DB/...
     db_root_path = os.path.join(BASE_DIR, 'DB')
     if os.path.exists(db_root_path):
-        print("🔍 Запуск тотального сканирования каталога DB...")
+        print("🔍 Запуск сканирования каталога DB...")
         for db_folder in os.listdir(db_root_path):
             db_path = os.path.join(db_root_path, db_folder)
             if not os.path.isdir(db_path): continue
@@ -136,7 +136,7 @@ def main():
                         h_info, tables, desc = parse_sql_header_and_relations(sql_content)
                         db_registry[e_name] = {'type': e_type, 'desc': desc}
                         
-                        # Возвращаем железную структуру wiki/DB/Имя_БД/Тип/Файл.md
+                        # Сохраняем структуру папки DB внутри каталога wiki
                         rel_root = os.path.relpath(root, BASE_DIR)
                         l_dir = os.path.normpath(os.path.join(WIKI_BASE, rel_root))
                         os.makedirs(l_dir, exist_ok=True)
@@ -146,20 +146,7 @@ def main():
                         db_monolith_data[e_type].append({'name': e_name, 'header_info': h_info, 'tables': tables, 'desc': desc})
             
             if db_registry:
-                # Карта ложится строго в wiki/DB/Имя_БД/Имя_БД.md
-                map_path = os.path.join(WIKI_BASE, 'DB', db_folder, f"{db_folder}.md")
-                os.makedirs(os.path.dirname(map_path), exist_ok=True)
-                card_parts = ["---", "type: database_map", "---", f"# 🗺️ Архитектурная карта БД {db_folder}", "", "Структура объектов:", ""]
-                categories = {'table': ('📊 Таблицы', []), 'stored_procedure': ('⚙️ Процедуры', []), 'trigger': ('🪤 Триггеры', []), 'view': ('👁️ Представления', []), 'sql_script': ('📝 Скрипты', [])}
-                for name, info in db_registry.items():
-                    if info['type'] in categories: categories[info['type']][1].append((name, info['desc']))
-                for ent_type, (title, items) in categories.items():
-                    if items:
-                        card_parts.append(f"## {title}")
-                        for name, desc in sorted(items, key=lambda x: x[0]): card_parts.append(f"* **[[{name}]]** — {desc}")
-                        card_parts.append("")
-                with open(map_path, 'w', encoding='utf-8') as f: f.write("\n".join(card_parts))
-
+                update_db_map_md(db_folder, db_registry, wiki_base)
                 titles = {'table': '📊 Таблицы данных', 'stored_procedure': '⚙️ Хранимые процедуры', 'trigger': '🪤 Триггеры', 'view': '👁️ Представления', 'sql_script': '📝 Скрипты'}
                 html = [f"<html><body><h1>🗺️ Архитектура БД {db_folder}</h1>"]
                 for t, tl in titles.items():
@@ -178,5 +165,6 @@ def main():
                             html.append("</div>")
                 html.append("</body></html>")
                 upload_or_update_google_doc(service, db_folder, "\n".join(html), get_or_create_drive_folder(service, 'DB', GOOGLE_FOLDER_ID))
+
 if __name__ == '__main__':
     main()
