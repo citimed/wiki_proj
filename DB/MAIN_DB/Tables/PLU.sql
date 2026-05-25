@@ -1,5 +1,5 @@
 IF OBJECT_ID('PLU', 'U') > 0
-  DROP TABLE PLU
+	DROP TABLE PLU
 GO
 -- ==========================================================
 -- NAME: PLU
