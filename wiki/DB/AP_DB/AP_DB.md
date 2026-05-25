@@ -10,8 +10,8 @@ type: database_map
 
 ## ⚙️ Процедуры
 * **[[ADD_LINE_TRANSACT]]** — Добавление строк в кешированный кассовый чек
-* **[[API_CREATE_TRANSACT_ONLINE]]** — Описание не указано
-* **[[CM_SPAY_PURCHASE]]** — Описание не указано
+* **[[API_CREATE_TRANSACT_ONLINE]]** — REST online создание чека от таблеток в аптеке
+* **[[CM_SPAY_PURCHASE]]** — Оплата на платежный терминал
 * **[[CM_SRRO_RECEIPT]]** — Описание не указано
 * **[[CM_SRRO_SAVELOG]]** — Описание не указано
 * **[[CM_SRRO_SELL]]** — Описание не указано
