@@ -73,11 +73,33 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        if [ -d "wiki" ] && [ -n "$(git status --porcelain wiki)" ]; then
-          git add wiki/
-          git commit -m "docs: автогенерация локальной wiki структуры [skip ci]"
-          git push
-          echo "✅ Локальная структура Wiki обновлена в репозитории"
+        echo "=== 🔎 ПРОВЕРКА ДИРЕКТОРИИ РЕПОЗИТОРИЯ ==="
+        pwd
+        
+        echo "=== 📂 ПРОВЕРКА НАЛИЧИЯ ПАПКИ WIKI ==="
+        if [ -d "wiki" ]; then
+          echo "✅ Папка wiki существует физически!"
+          echo "--- Содержимое папки wiki: ---"
+          find wiki -type f
         else
-          echo "💡 Нет изменений для фиксации в локальной wiki"
+          echo "❌ КРИТИЧЕСКАЯ ОШИБКА: Папка wiki вообще не была создана на диске!"
+        fi
+        
+        echo "=== 📊 СТАТУС GIT ПЕРЕД ДОБАВЛЕНИЕМ ==="
+        git status
+        
+        echo "=== ➕ ДОБАВЛЕНИЕ ФАЙЛОВ ==="
+        git add wiki/ || true
+        git add -A || true
+        
+        echo "=== 📊 СТАТУС GIT ПОСЛЕ ДОБАВЛЕНИЯ ==="
+        git status
+        
+        echo "=== 🚀 ПОПЫТКА КОММИТА И ПУША ==="
+        if [ -n "$(git status --porcelain)" ]; then
+          git commit -m "docs: автогенерация локальной wiki структуры [skip ci]"
+          git push origin main
+          echo "✅ Изменения успешно отправлены в репозиторий!"
+        else
+          echo "💡 Git по-прежнему считает, что изменений нет."
         fi
