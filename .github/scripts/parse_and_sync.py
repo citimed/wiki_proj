@@ -60,11 +60,11 @@ def upload_or_update_google_doc(service, doc_name, html_content, target_folder_i
     media = MediaIoBaseUpload(io.BytesIO(html_content.encode('utf-8')), mimetype='text/html', resumable=False)
     if items:
         service.files().update(fileId=items[0]['id'], media_body=media, supportsAllDrives=True).execute()
-        print(f"🔄 Обновлен: {doc_name}")
+        print(f"🔄 Обновлен в Drive: {doc_name}")
     else:
         meta = {'name': doc_name, 'mimeType': 'application/vnd.google-apps.document', 'parents': [target_folder_id]}
         service.files().create(body=meta, media_body=media, fields="id", supportsAllDrives=True).execute()
-        print(f"📥 Создан: {doc_name}")
+        print(f"📥 Создан в Drive: {doc_name}")
 
 def get_or_create_drive_folder(service, folder_name, parent_id):
     query = f"name = '{folder_name}' and '{parent_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
@@ -84,38 +84,16 @@ def convert_markdown_to_basic_html(md_text, title):
     return f"<html><body><h1>📝 Модуль: {title}</h1>{''.join(html)}</body></html>"
 
 def main():
-    # --- НАШ ДИАГНОСТИЧЕСКИЙ ЩИТ ---
-    if not os.path.exists(SERVICE_ACCOUNT_FILE):
-        print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Файл {SERVICE_ACCOUNT_FILE} не найден!")
-        return
-    print(f"📦 Размер файла ключа: {os.path.getsize(SERVICE_ACCOUNT_FILE)} байт.")
-    try:
-        with open(SERVICE_ACCOUNT_FILE, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-            if not content:
-                print("❌ КРИТИЧЕСКАЯ ОШИБКА: Файл ключа ПУСТОЙ!")
-                return
-            json.loads(content)
-    except json.JSONDecodeError as je:
-        print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Невалидный JSON! Начало: {content[:30]}... Ошибка: {je}")
-        return
-
+    if not os.path.exists(SERVICE_ACCOUNT_FILE): return
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=['https://www.googleapis.com/auth/drive'])
     service = build('drive', 'v3', credentials=creds)
-    changed_files = json.loads(os.environ.get('CHANGED_FILES_JSON', '[]'))
-    if not changed_files: return
-
-    print(f"🚀 Измененных файлов: {len(changed_files)}")
-    databases_to_rebuild = set()
     
+    # 1. СИНХРОНИЗАЦИЯ КОРНЕВЫХ КАРТИН СИСТЕМЫ (*.md модули)
+    changed_files = json.loads(os.environ.get('CHANGED_FILES_JSON', '[]'))
     for file_path in changed_files:
         file_path = os.path.normpath(file_path)
-        if file_path.startswith('wiki' + os.sep) or file_path.startswith('.github'): continue
-        parts = file_path.split(os.sep)
-        if len(parts) >= 3 and parts[0] == 'DB':
-            databases_to_rebuild.add(os.path.join('DB', parts[1]))
-            continue
-        if file_path.endswith('.md') and os.path.exists(file_path):
+        if file_path.startswith('wiki') or file_path.startswith('.github') or not file_path.endswith('.md'): continue
+        if os.path.exists(file_path):
             parent_dir = os.path.dirname(file_path)
             if parent_dir and os.path.basename(file_path).replace('.md', '') == os.path.basename(parent_dir):
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f: md_content = f.read()
@@ -126,51 +104,62 @@ def main():
                 for part in parent_dir.split(os.sep): f_id = get_or_create_drive_folder(service, part, f_id)
                 upload_or_update_google_doc(service, os.path.basename(file_path).replace('.md', ''), convert_markdown_to_basic_html(md_content, os.path.basename(file_path).replace('.md', '')), f_id)
 
-    for db_path in databases_to_rebuild:
-        db_name = os.path.basename(db_path)
-        print(f"⚙️ Монолит для базы: {db_name}")
-        db_registry, db_monolith_data = {}, {'table': [], 'stored_procedure': [], 'trigger': [], 'view': [], 'sql_script': []}
-        
-        for root, _, files in os.walk(os.path.normpath(f'./{db_path}')):
-            for file in files:
-                if file.endswith('.sql'):
-                    e_name = file.replace('.sql', '')
-                    if e_name in db_registry: continue
-                    e_type, _ = get_entity_type_info(root)
-                    sql_content = None
-                    for enc in ['utf-8', 'utf-16', 'windows-1251']:
-                        try:
-                            with open(os.path.join(root, file), 'r', encoding=enc) as f: sql_content = f.read()
-                            break
-                        except Exception: pass
-                    if sql_content is None: continue
-                    h_info, tables, desc = parse_sql_header_and_relations(sql_content)
-                    db_registry[e_name] = {'type': e_type, 'desc': desc}
-                    l_dir = os.path.normpath(os.path.join('wiki', os.path.relpath(root, '.')))
-                    os.makedirs(l_dir, exist_ok=True)
-                    with open(os.path.join(l_dir, f"{e_name}.md"), 'w', encoding='utf-8') as mf: mf.write(generate_entity_md(e_name, h_info, tables, e_type))
-                    db_monolith_data[e_type].append({'name': e_name, 'header_info': h_info, 'tables': tables, 'desc': desc})
-                    
-        if db_registry:
-            update_db_map_md(db_path, db_registry)
-            titles = {'table': '📊 Таблицы данных', 'stored_procedure': '⚙️ Хранимые процедуры', 'trigger': '🪤 Триггеры', 'view': '👁️ Представления', 'sql_script': '📝 Скрипты'}
-            html = [f"<html><body><h1>🗺️ Архитектура БД {db_name}</h1>"]
-            for t, tl in titles.items():
-                if db_monolith_data[t]:
-                    html.append(f"<h3>{tl}</h3><ul>")
-                    for x in sorted(db_monolith_data[t], key=lambda i: i['name']): html.append(f"<li><b><a href='#e_{x['name']}'>{x['name']}</a></b> — {x['desc']}</li>")
-                    html.append("</ul>")
-            html.append("<hr/>")
-            for t, tl in titles.items():
-                if db_monolith_data[t]:
-                    html.append(f"<h1>{tl}</h1>")
-                    for x in sorted(db_monolith_data[t], key=lambda i: i['name']):
-                        html.append(f"<div id='e_{x['name']}' style='margin-bottom:30px;'><h2>dbo.{x['name']}</h2><pre style='background:#f4f4f4;padding:10px;'>{x['header_info']}</pre>")
-                        if x['tables']: html.append("<ul>" + "".join([f"<li>Связан с: <a href='#e_{s}'>{s}</a></li>" for s in x['tables']]) + "</ul>")
-                        else: html.append("<p><i>Связи не найдены</i></p>")
-                        html.append("</div>")
-            html.append("</body></html>")
-            upload_or_update_google_doc(service, db_name, "\n".join(html), get_or_create_drive_folder(service, 'DB', GOOGLE_FOLDER_ID))
+    # 2. ПОЛНОЕ СКАНИРОВАНИЕ ВСЕХ БАЗ ДАННЫХ В ПАПКЕ DB (Тотальная генерация локальной wiki)
+    if os.path.exists('DB'):
+        print("🔍 Запуск тотального сканирования каталога DB...")
+        for db_folder in os.listdir('DB'):
+            db_path = os.path.join('DB', db_folder)
+            if not os.path.isdir(db_path): continue
+            
+            print(f"⚙️ Сборка документации для базы: {db_folder}")
+            db_registry, db_monolith_data = {}, {'table': [], 'stored_procedure': [], 'trigger': [], 'view': [], 'sql_script': []}
+            
+            for root, _, files in os.walk(db_path):
+                for file in files:
+                    if file.endswith('.sql'):
+                        e_name = file.replace('.sql', '')
+                        if e_name in db_registry: continue
+                        e_type, _ = get_entity_type_info(root)
+                        
+                        sql_content = None
+                        for enc in ['utf-8', 'utf-16', 'windows-1251']:
+                            try:
+                                with open(os.path.join(root, file), 'r', encoding=enc) as f: sql_content = f.read()
+                                break
+                            except Exception: pass
+                        if sql_content is None: continue
+                        
+                        h_info, tables, desc = parse_sql_header_and_relations(sql_content)
+                        db_registry[e_name] = {'type': e_type, 'desc': desc}
+                        
+                        # Генерируем локальный .md файл в папку wiki
+                        l_dir = os.path.normpath(os.path.join('wiki', os.path.relpath(root, '.')))
+                        os.makedirs(l_dir, exist_ok=True)
+                        with open(os.path.join(l_dir, f"{e_name}.md"), 'w', encoding='utf-8') as mf: 
+                            mf.write(generate_entity_md(e_name, h_info, tables, e_type))
+                        
+                        db_monolith_data[e_type].append({'name': e_name, 'header_info': h_info, 'tables': tables, 'desc': desc})
+            
+            if db_registry:
+                update_db_map_md(db_path, db_registry)
+                titles = {'table': '📊 Таблицы данных', 'stored_procedure': '⚙️ Хранимые процедуры', 'trigger': '🪤 Триггеры', 'view': '👁️ Представления', 'sql_script': '📝 Скрипты'}
+                html = [f"<html><body><h1>🗺️ Архитектура БД {db_folder}</h1>"]
+                for t, tl in titles.items():
+                    if db_monolith_data[t]:
+                        html.append(f"<h3>{tl}</h3><ul>")
+                        for x in sorted(db_monolith_data[t], key=lambda i: i['name']): html.append(f"<li><b><a href='#e_{x['name']}'>{x['name']}</a></b> — {x['desc']}</li>")
+                        html.append("</ul>")
+                html.append("<hr/>")
+                for t, tl in titles.items():
+                    if db_monolith_data[t]:
+                        html.append(f"<h1>{tl}</h1>")
+                        for x in sorted(db_monolith_data[t], key=lambda i: i['name']):
+                            html.append(f"<div id='e_{x['name']}' style='margin-bottom:30px;'><h2>dbo.{x['name']}</h2><pre style='background:#f4f4f4;padding:10px;'>{x['header_info']}</pre>")
+                            if x['tables']: html.append("<ul>" + "".join([f"<li>Связан с: <a href='#e_{s}'>{s}</a></li>" for s in x['tables']]) + "</ul>")
+                            else: html.append("<p><i>Связи не найдены</i></p>")
+                            html.append("</div>")
+                html.append("</body></html>")
+                upload_or_update_google_doc(service, db_folder, "\n".join(html), get_or_create_drive_folder(service, 'DB', GOOGLE_FOLDER_ID))
 
 if __name__ == '__main__':
     main()
