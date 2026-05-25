@@ -8,10 +8,10 @@ dialect: T-SQL
 
 ## 📄 Метаданные
 ```text
-Name    : PROCEDURE CM_OVERPRICE_FROM_STOCK_LIMITED_LIFE
-Description    : Добавить партии товара в акт переоценки, где партии со сроком меньшим, чем указано в константе
-Author         : Lukin E.V.
-Release        : 18.05.2026 Lukin E.V.
+Name: PROCEDURE CM_OVERPRICE_FROM_STOCK_LIMITED_LIFE
+Description: Добавить партии товара в акт переоценки, где партии со сроком меньшим, чем указано в константе
+Author: Lukin E.V.
+Release: 18.05.2026 Lukin E.V.
 Changelog:
 ```
 

@@ -6,5 +6,5 @@ type: database_map
 Структура объектов:
 
 ## 📝 Скрипты
-* **[[AUKRC1_create_OP_by_TRANSFER_LINK]]** — Описание не указано
-* **[[CM_OVERPRICE_FROM_STOCK_LIMITED_LIFE]]** — Описание не указано
+* **[[AUKRC1_create_OP_by_TRANSFER_LINK]]** — Создание Акта переоценки на размещении аптеки по перемещению
+* **[[CM_OVERPRICE_FROM_STOCK_LIMITED_LIFE]]** — Добавить партии товара в акт переоценки, где партии со сроком меньшим, чем указано в константе
