@@ -8,7 +8,7 @@ dialect: T-SQL
 
 ## 📄 Метаданные
 ```text
-NAME    : PROCEDURE AUKRC1_create_OP_by_TRANSFER_LINK
+Name    : PROCEDURE AUKRC1_create_OP_by_TRANSFER_LINK
 Description    : Создание Акта переоценки на размещении аптеки по перемещению
 Author         : vsh
 Release        : 17.02.09
