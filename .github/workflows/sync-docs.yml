@@ -13,9 +13,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
-  repository-projects: write
-  statuses: write
 
 jobs:
   sync-docs:
@@ -39,7 +36,6 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        cache: ''
 
     - name: Install dependencies
       run: |
@@ -48,18 +44,14 @@ jobs:
 
     - name: Create Service Account Key File
       run: |
-        # Запись многострочного секрета через HEREDOC
         cat << 'EOF' > github_credentials.json
         ${{ secrets.GOOGLE_CREDENTIALS }}
         EOF
         
-        # Автодекодирование, если в секретах GitHub лежит Base64 вместо чистого JSON
         if ! grep -q "{" github_credentials.json; then
-          echo "🔄 Обнаружена Base64-строка. Декодируем..."
+          echo "🔄 Декодируем Base64..."
           base64 --decode github_credentials.json > temp.json && mv temp.json github_credentials.json
         fi
-        
-        echo "✅ Файл ключа создан. Размер: $(wc -c < github_credentials.json) байт."
 
     - name: Run Parse and Sync Script
       env:
@@ -73,19 +65,14 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        echo "=== 🧹 Очищаем индекс и добавляем заново ==="
-        # Это заставит Git принудительно переиндексировать всю папку wiki
-        git rm -r --cached wiki/ 2>/dev/null || true
-        git add wiki/
+        echo "=== ➕ Добавление файлов ==="
+        git add -f wiki/
         
-        echo "=== 📊 Проверяем, что попало в индекс ==="
-        git status
-        
-        echo "=== 🚀 Пушим изменения ==="
-        if ! git diff --cached --quiet; then
+        echo "=== 🚀 Пуш ==="
+        if git diff --cached --quiet; then
+          echo "💡 Новых изменений в папке wiki не найдено."
+        else
           git commit -m "docs: автогенерация локальной wiki структуры [skip ci]"
           git push origin main
-          echo "✅ Изменения успешно отправлены в репозиторий!"
-        else
-          echo "💡 Git не зафиксировал новых изменений в папке wiki."
+          echo "✅ Все файлы успешно отправлены в репозиторий!"
         fi
