@@ -73,16 +73,19 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        echo "=== ➕ ДОБАВЛЕНИЕ СТРОГО ПАПКИ WIKI ==="
-        if [ -d "wiki" ]; then
-          git add wiki/
-        fi
+        echo "=== 🧹 Очищаем индекс и добавляем заново ==="
+        # Это заставит Git принудительно переиндексировать всю папку wiki
+        git rm -r --cached wiki/ 2>/dev/null || true
+        git add wiki/
         
-        echo "=== 🚀 ПОПЫТКА КОММИТА И ПУША ==="
-        if [ -n "$(git status --porcelain wiki)" ]; then
+        echo "=== 📊 Проверяем, что попало в индекс ==="
+        git status
+        
+        echo "=== 🚀 Пушим изменения ==="
+        if ! git diff --cached --quiet; then
           git commit -m "docs: автогенерация локальной wiki структуры [skip ci]"
           git push origin main
           echo "✅ Изменения успешно отправлены в репозиторий!"
         else
-          echo "💡 Нет изменений в папке wiki для фиксации."
+          echo "💡 Git не зафиксировал новых изменений в папке wiki."
         fi
