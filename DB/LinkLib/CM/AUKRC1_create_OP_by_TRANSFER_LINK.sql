@@ -1,8 +1,8 @@
 -- ============================================================
--- Name    : PROCEDURE AUKRC1_create_OP_by_TRANSFER_LINK
--- Description    : Создание Акта переоценки на размещении аптеки по перемещению
--- Author         : vsh
--- Release        : 17.02.09
+-- Name: PROCEDURE AUKRC1_create_OP_by_TRANSFER_LINK
+-- Description: Создание Акта переоценки на размещении аптеки по перемещению
+-- Author: vsh
+-- Release: 17.02.09
 -- Changelog:
 -- * 17.04.12  vsh - все переоценки (без учета связи)
 -- * 21.09.12  vsh - количество не обновлялось, связь документов
