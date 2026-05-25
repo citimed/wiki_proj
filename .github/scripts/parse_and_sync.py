@@ -88,7 +88,6 @@ def main():
     creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=['https://www.googleapis.com/auth/drive'])
     service = build('drive', 'v3', credentials=creds)
     
-    # Базовый путь к корню репозитория
     BASE_DIR = os.getcwd()
     WIKI_BASE = os.path.join(BASE_DIR, 'wiki')
     
@@ -108,7 +107,7 @@ def main():
                 for part in parent_dir.split(os.sep): f_id = get_or_create_drive_folder(service, part, f_id)
                 upload_or_update_google_doc(service, os.path.basename(file_path).replace('.md', ''), convert_markdown_to_basic_html(md_content, os.path.basename(file_path).replace('.md', '')), f_id)
 
-    # 2. ПОЛНОЕ СКАНИРОВАНИЕ ВСЕХ БАЗ ДАННЫХ В ПАПКЕ DB (Тотальная генерация локальной wiki)
+    # 2. ПОЛНОЕ СКАНИРОВАНИЕ ВСЕХ БАЗ ДАННЫХ В ПАПКЕ DB (С сохранением структуры wiki/DB/...)
     db_root_path = os.path.join(BASE_DIR, 'DB')
     if os.path.exists(db_root_path):
         print("🔍 Запуск тотального сканирования каталога DB...")
@@ -137,7 +136,7 @@ def main():
                         h_info, tables, desc = parse_sql_header_and_relations(sql_content)
                         db_registry[e_name] = {'type': e_type, 'desc': desc}
                         
-                        # Генерируем локальный .md файл строго в рабочую директорию wiki проекта
+                        # Возвращаем железную структуру wiki/DB/Имя_БД/Тип/Файл.md
                         rel_root = os.path.relpath(root, BASE_DIR)
                         l_dir = os.path.normpath(os.path.join(WIKI_BASE, rel_root))
                         os.makedirs(l_dir, exist_ok=True)
@@ -147,7 +146,7 @@ def main():
                         db_monolith_data[e_type].append({'name': e_name, 'header_info': h_info, 'tables': tables, 'desc': desc})
             
             if db_registry:
-                # Исправляем путь для карты базы данных
+                # Карта ложится строго в wiki/DB/Имя_БД/Имя_БД.md
                 map_path = os.path.join(WIKI_BASE, 'DB', db_folder, f"{db_folder}.md")
                 os.makedirs(os.path.dirname(map_path), exist_ok=True)
                 card_parts = ["---", "type: database_map", "---", f"# 🗺️ Архитектурная карта БД {db_folder}", "", "Структура объектов:", ""]
