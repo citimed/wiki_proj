@@ -3,7 +3,7 @@ IF OBJECT_ID('PLU', 'U') > 0
 GO
 -- ==========================================================
 -- NAME: PLU
--- Descriprion: Список SKU
+-- Descriprion: Справочник SKU 
 -- RELEASE: 
 -- Author: 
 -- Changelog:
