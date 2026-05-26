@@ -1,4 +1,4 @@
-## ⬅️ [[wiki_proj]]<br><br>
+## [[wiki_proj]]<br><br>
 
 # 🗄️ Рабочие проекты(delphi, flutter, node.js )
 
