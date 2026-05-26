@@ -4,9 +4,8 @@
 ## * LinkLib
 ## * [[Projects]]
 
-## * TradePharm
 ## * LinkLibApt
 ## * [[Nginx]]
-## * TrSyn
-## * Utilities
+## * TrSyn - система синхронизации данных аптек и ЦБД(устаревшее)
+## * [[Utilities]] - различные вспомогательные модули
 ## * WEB           - для web-разработки
